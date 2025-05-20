@@ -1,20 +1,22 @@
 [package]
-name = "bq769x0-async-rs"
+name = "bq25730-async-rs"
 version = "0.1.1"
 authors = ["Ivan Li <ivanli2048@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "A BQ769x0 driver based on embedded-hal. Support `async` and `sync` features."
-keywords = ["battery-management", "embedded-hal-driver", "no-std", "bq769x0", "async"]
-repository = "https://github.com/IvanLi-CN/bq769x0-async-rs"
+description = "A BQ25730 driver based on embedded-hal. Support `async` and `sync` features."
+keywords = ["battery-management", "embedded-hal-driver", "no-std", "bq25730", "async"]
+repository = "https://github.com/IvanLi-CN/bq25730-async-rs"
 
 [dependencies]
 embedded-hal = "1.0.0"
 embedded-hal-async = { version = "1.0.0", optional = true }
 maybe-async-cfg = "0.2.5"
+heapless = "0.8" # Add heapless dependency
+defmt = { version = "1.0", optional = true } # Add defmt dependency
 
 [dev-dependencies]
-embedded-hal-mock = "0.8.0"
+embedded-hal-mock = "0.11"
 
 [profile.dev]
 # Rust debug is too slow.
@@ -31,7 +33,7 @@ opt-level = 's'
 overflow-checks = false
 
 [features]
+default = ["async", "bq25730"]
 async = ["dep:embedded-hal-async"]
-bq76920 = []
-bq76930 = []
-bq76940 = []
+defmt = ["dep:defmt"] # Add defmt feature
+bq25730 = []

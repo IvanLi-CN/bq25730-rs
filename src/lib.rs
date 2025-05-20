@@ -1,374 +1,532 @@
 #![no_std]
+#[cfg(feature = "defmt")]
+extern crate defmt; // Make defmt available for derive macros
 
+use core::ops::{Deref, DerefMut};
 #[cfg(not(feature = "async"))]
+use embedded_hal::i2c::I2c;
 #[cfg(feature = "async")]
 use embedded_hal_async::i2c::I2c;
 
+pub mod data_types;
+mod errors;
 pub mod registers;
+use data_types::*; // Import BQ25730 data types
+pub use errors::Error;
+use registers::Register; // Use BQ25730 registers
 
-/// Represents potential errors when interacting with the BQ769x0 chip.
-#[derive(Debug)]
-pub enum Error<E> {
-    /// An error occurred during I2C communication.
-    I2c(E),
-    // Add other specific error types as needed later, e.g.:
-    // InvalidData,
-    // UnsupportedFeature,
-}
-/// Represents the measured cell voltages.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct CellVoltages {
-    /// Voltage of cell 1 to 15.
-    /// The number of valid cells depends on the chip model (BQ76920: 5, BQ76930: 10, BQ76940: 15).
-    pub voltages: [u16; 15],
-}
+/// Trait for abstracting register access, with or without CRC.
+pub trait RegisterAccess<E> {
+    /// The buffer type used for reading multiple registers.
+    type ReadBuffer: Default + Extend<u8> + Deref<Target = [u8]> + DerefMut + Sized;
+    /// The buffer type used for reading multiple registers.
 
-/// Represents the measured temperatures.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Temperatures {
-    /// Temperature from TS1 sensor (or Die Temp if configured).
-    pub ts1: i16,
-    /// Temperature from TS2 sensor (BQ76930/40 only).
-    pub ts2: Option<i16>,
-    /// Temperature from TS3 sensor (BQ76940 only).
-    pub ts3: Option<i16>,
-}
+    /// Reads a single register.
+    fn read_register(
+        &mut self,
+        reg: Register,
+    ) -> impl core::future::Future<Output = Result<u8, Error<E>>>;
 
-/// Represents the measured pack current from the Coulomb Counter.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Current {
-    /// Raw Coulomb Counter value. Needs conversion based on CC_CFG and Rsense.
-    pub raw_cc: i16,
-}
+    /// Reads multiple registers starting from `reg`.
+    fn read_registers(
+        &mut self,
+        reg: Register,
+        len: usize,
+    ) -> impl core::future::Future<Output = Result<Self::ReadBuffer, Error<E>>>;
 
-/// Represents the hardware protection configuration.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct ProtectionConfig {
-    /// Short-Circuit Discharge (SCD) threshold.
-    pub scd_threshold: u8,
-    /// Short-Circuit Discharge (SCD) delay.
-    pub scd_delay: u8,
-    /// Overcurrent Discharge (OCD) threshold.
-    pub ocd_threshold: u8,
-    /// Overcurrent Discharge (OCD) delay.
-    pub ocd_delay: u8,
-    /// Overvoltage (OV) delay.
-    pub ov_delay: u8,
-    /// Undervoltage (UV) delay.
-    pub uv_delay: u8,
+    /// Writes a single register.
+    fn write_register(
+        &mut self,
+        reg: Register,
+        value: u8,
+    ) -> impl core::future::Future<Output = Result<(), Error<E>>>;
+
+    /// Writes multiple registers starting from `reg`.
+    fn write_registers(
+        &mut self,
+        reg: Register,
+        values: &[u8],
+    ) -> impl core::future::Future<Output = Result<(), Error<E>>>;
 }
 
-/// BQ769x0 driver
-pub struct Bq769x0<I2C> {
+/// BQ25730 driver
+pub struct Bq25730<I2C>
+where
+    I2C: I2c,
+{
     address: u8,
     i2c: I2C,
 }
 
-impl<I2C, E> Bq769x0<I2C>
+impl<I2C, E> Bq25730<I2C>
 where
-    I2C: embedded_hal::i2c::I2c<Error = E>,
+    I2C: I2c<Error = E>,
 {
-    /// Creates a new instance of the BQ769x0 driver.
+    /// Creates a new instance of the BQ25730 driver.
     ///
     /// # Arguments
     ///
     /// * `i2c` - The I2C peripheral.
-    /// * `address` - The I2C address of the BQ769x0 chip.
+    /// * `address` - The I2C address of the BQ25730 chip.
     pub fn new(i2c: I2C, address: u8) -> Self {
-        Self { address, i2c }
+        Self {
+            address,
+            i2c,
+        }
     }
+}
 
-    /// Reads a single byte from the specified register.
-    ///
-    /// # Arguments
-    ///
-    /// * `reg` - The register to read from.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_register(&mut self, reg: Register) -> Result<u8, Error<E>> {
-        let mut buf = [0u8; 1];
+impl<I2C, E> RegisterAccess<E> for Bq25730<I2C>
+where
+    I2C: I2c<Error = E> + Send,
+{
+    type ReadBuffer = heapless::Vec<u8, 30>; // Same buffer type as Enabled mode
+
+    async fn read_register(&mut self, reg: Register) -> Result<u8, Error<E>> {
+        let mut data = [0u8; 1];
         self.i2c
-            .write_read(self.address, &[reg as u8], &mut buf)
+            .write_read(self.address, &[reg as u8], &mut data)
             .await
             .map_err(Error::I2c)?;
-        Ok(buf[0])
+        Ok(data[0])
     }
 
-    /// Reads multiple bytes starting from the specified register.
-    ///
-    /// # Arguments
-    ///
-    /// * `reg` - The starting register to read from.
-    /// * `len` - The number of bytes to read.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_registers(&mut self, reg: Register, len: usize) -> Result<Vec<u8>, Error<E>> {
-        let mut buf = vec![0u8; len];
+    async fn read_registers(
+        &mut self,
+        reg: Register,
+        len: usize,
+    ) -> Result<Self::ReadBuffer, Error<E>> {
+        if len == 0 || len > 30 {
+            #[cfg(feature = "defmt")]
+            defmt::error!("Invalid read length: {}", len);
+            return Err(Error::InvalidData);
+        }
+
+        let mut buffer: heapless::Vec<u8, 30> = heapless::Vec::new();
+        buffer.resize(len, 0).map_err(|_| Error::InvalidData)?;
+
         self.i2c
-            .write_read(self.address, &[reg as u8], &mut buf)
+            .write_read(self.address, &[reg as u8], &mut buffer)
             .await
             .map_err(Error::I2c)?;
-        Ok(buf)
+
+        Ok(buffer)
     }
 
-    /// Writes a single byte to the specified register.
-    ///
-    /// # Arguments
-    ///
-    /// * `reg` - The register to write to.
-    /// * `value` - The byte value to write.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn write_register(&mut self, reg: Register, value: u8) -> Result<(), Error<E>> {
+    async fn write_register(&mut self, reg: Register, value: u8) -> Result<(), Error<E>> {
         self.i2c
             .write(self.address, &[reg as u8, value])
             .await
             .map_err(Error::I2c)
     }
 
-    /// Writes multiple bytes starting from the specified register.
-    ///
-    /// # Arguments
-    ///
-    /// * `reg` - The starting register to write to.
-    /// * `values` - The slice of bytes to write.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn write_registers(&mut self, reg: Register, values: &[u8]) -> Result<(), Error<E>> {
-        let mut data = vec![reg as u8];
-        data.extend_from_slice(values);
+    async fn write_registers(&mut self, reg: Register, values: &[u8]) -> Result<(), Error<E>> {
+        if values.is_empty() || values.len() > 30 {
+            #[cfg(feature = "defmt")]
+            defmt::error!("Invalid write length: {}", values.len());
+            return Err(Error::InvalidData);
+        }
+
+        let mut data_to_write = heapless::Vec::<u8, 31>::new(); // register + values
+        data_to_write
+            .push(reg as u8)
+            .map_err(|_| Error::InvalidData)?;
+        data_to_write
+            .extend_from_slice(values)
+            .map_err(|_| Error::InvalidData)?;
+
         self.i2c
-            .write(self.address, &data)
+            .write(self.address, &data_to_write)
             .await
             .map_err(Error::I2c)
     }
-    /// Reads and converts cell voltages.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_cell_voltages(&mut self) -> Result<CellVoltages, Error<E>> {
-        // Read all cell voltage registers (15 cells * 2 bytes/cell = 30 bytes)
-        let raw_voltages = self.read_registers(Register::VC1_HI, 30).await?;
+}
 
-        // Read ADC Gain and Offset registers
-        let adc_gain1 = self.read_register(Register::ADCGAIN1).await?;
-        let adc_offset = self.read_register(Register::ADCOFFSET).await?;
-        let adc_gain2 = self.read_register(Register::ADCGAIN2).await?;
 
-        // Combine ADCGAIN1 and ADCGAIN2 to get the 12-bit gain value
-        // ADC_GAIN = (ADCGAIN2[7:4] << 8) | ADCGAIN1[7:0]
-        let adc_gain: u16 = (((adc_gain2 & 0xF0) as u16) << 4) | (adc_gain1 as u16); // 12-bit gain
-        let adc_offset: u8 = adc_offset; // 8-bit offset (assuming unsigned based on register map)
+impl<I2C, E> Bq25730<I2C>
+where
+    I2C: I2c<Error = E> + Send,
+    Self: RegisterAccess<E>,
+{
+    /// Initializes the BQ25730 charger.
+    /// This function sets basic configuration and clears status flags.
+    pub async fn init(&mut self) -> Result<(), Error<E>> {
+        // Example initialization steps (refer to datasheet for recommended sequence)
 
-        let mut voltages = [0u16; 15];
-        for i in 0..15 {
-            let hi_byte = raw_voltages[i * 2];
-            let lo_byte = raw_voltages[i * 2 + 1];
+        // Set default ChargeOption0 (e.g., enable IIN_DPM, disable Charge Inhibit)
+        // Assuming default values for other bits for now.
+        let charge_option0_lsb: u8 = registers::CHARGE_OPTION0_EN_IIN_DPM;
+        let charge_option0_msb: u8 = 0; // Assuming default MSB
+                                        // ChargeOption0 is a 16-bit register (01/00h). Write to LSB (0x00) first.
+        self.write_registers(
+            Register::ChargeOption0,
+            &[charge_option0_lsb, charge_option0_msb],
+        )
+        .await?;
 
-            // Combine bytes to get 14-bit raw ADC value
-            // Raw ADC = (VCx_HI << 6) | (VCx_LO >> 2)
-            let raw_adc: u16 = ((hi_byte as u16) << 6) | ((lo_byte as u16) >> 2);
+        // Set default Input Current Limit (e.g., 3.2A, which is 3200mA)
+        // IIN_HOST LSB is 100mA, offset is 100mA. 3200mA = (raw * 100) + 100 => raw = 31
+        let iin_host_ma = IinHost(3200);
+        self.set_iin_host(iin_host_ma).await?;
 
-            // Convert raw ADC to voltage (in mV)
-            // VCELLn (V) = (ADC_CELLn * ADC_GAIN + ADC_OFFSET) * 1e-6
-            // VCELLn (mV) = (ADC_CELLn * ADC_GAIN + ADC_OFFSET) * 1e-3
-            // VCELLn (uV) = (ADC_CELLn * ADC_GAIN + ADC_OFFSET)
-            // VCELLn (mV) = VCELLn (uV) / 1000
-            let v_cell_uv: u32 = (raw_adc as u32 * adc_gain as u32) + adc_offset as u32;
-            voltages[i] = (v_cell_uv / 1000) as u16; // Convert uV to mV and cast to u16
-        }
-        Ok(CellVoltages { voltages })
+        // Set default Minimum System Voltage (e.g., 3.5V, which is 3500mV)
+        // VSYS_MIN LSB is 100mV. 3500mV = raw * 100 => raw = 35
+        let vsys_min_mv = VsysMin(3500);
+        self.set_vsys_min(vsys_min_mv).await?;
+
+        // Clear all status flags by writing 1s to the SysStat register
+        // Refer to datasheet for which flags are clearable by writing 1.
+        // Assuming all bits in SysStat are clearable by writing 1 for now.
+        // Need to confirm this with datasheet.
+        // For now, let's clear the fault flags in ChargerStatus LSB.
+        let flags_to_clear: u8 = registers::CHARGER_STATUS_FAULT_ACOV
+            | registers::CHARGER_STATUS_FAULT_BATOC
+            | registers::CHARGER_STATUS_FAULT_ACOC
+            | registers::CHARGER_STATUS_FAULT_SYSOVP
+            | registers::CHARGER_STATUS_FAULT_VSYS_UVP
+            | registers::CHARGER_STATUS_FAULT_FORCE_CONVERTER_OFF
+            | registers::CHARGER_STATUS_FAULT_OTG_OVP
+            | registers::CHARGER_STATUS_FAULT_OTG_UVP;
+        // Note: SysStat register address is 0x20, which is the LSB of ChargerStatus.
+        // Writing to ChargerStatus LSB (0x20) clears these flags.
+        // Clear fault flags in ChargerStatus LSB (0x20) by writing 1s.
+        self.write_register(Register::ChargerStatus, flags_to_clear)
+            .await?;
+
+        Ok(())
     }
 
-    /// Reads and converts the total battery pack voltage.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_pack_voltage(&mut self) -> Result<u16, Error<E>> {
-        // Read BAT_HI and BAT_LO registers (2 bytes)
-        let raw_voltage = self.read_registers(Register::BAT_HI, 2).await?;
+    // TODO: Implement core functions based on BQ25730 datasheet
+    // - Register read/write functions for specific data types (already started)
+    // - Charging control
+    // - OTG control
+    // - Status and measurement reading (using the new data types) (already started)
+    // - Protection configuration
+    // - Other features (DPM, ICO, Peak Power, PROCHOT)
 
-        // Read ADC Gain and Offset registers
-        let adc_gain1 = self.read_register(Register::ADCGAIN1).await?;
-        let adc_offset = self.read_register(Register::ADCOFFSET).await?;
-        let adc_gain2 = self.read_register(Register::ADCGAIN2).await?;
+    /// Reads the Charger Status register.
+    pub async fn read_charger_status(&mut self) -> Result<ChargerStatus, Error<E>> {
+        let raw_status = self.read_registers(Register::ChargerStatusMsb, 2).await?;
+        let lsb = raw_status.as_ref()[0];
+        let msb = raw_status.as_ref()[1];
 
-        // Combine ADCGAIN1 and ADCGAIN2 to get the 12-bit gain value
-        let adc_gain: u16 = (((adc_gain2 & 0xF0) as u16) << 4) | (adc_gain1 as u16);
-        let adc_offset: u8 = adc_offset;
-
-        // Combine bytes to get 14-bit raw ADC value
-        // Raw ADC = (BAT_HI << 6) | (BAT_LO >> 2)
-        let raw_adc: u16 = ((raw_voltage[0] as u16) << 6) | ((raw_voltage[1] as u16) >> 2);
-
-        // Convert raw ADC to voltage (in mV)
-        // VPACK (V) = (ADC_PACK * ADC_GAIN + ADC_OFFSET) * 1e-6
-        // VPACK (mV) = (ADC_PACK * ADC_GAIN + ADC_OFFSET) * 1e-3
-        let v_pack_uv: u32 = (raw_adc as u32 * adc_gain as u32) + adc_offset as u32;
-        let pack_voltage_mv = (v_pack_uv / 1000) as u16; // Convert uV to mV and cast to u16
-
-        Ok(pack_voltage_mv)
-    }
-
-    /// Reads and converts temperatures from sensors.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_temperatures(&mut self) -> Result<Temperatures, Error<E>> {
-        // Read TS1_HI and TS1_LO registers (2 bytes)
-        let raw_ts1 = self.read_registers(Register::TS1_HI, 2).await?;
-
-        // Read ADC Gain and Offset registers
-        let adc_gain1 = self.read_register(Register::ADCGAIN1).await?;
-        let adc_offset = self.read_register(Register::ADCOFFSET).await?;
-        let adc_gain2 = self.read_register(Register::ADCGAIN2).await?;
-
-        // Combine ADCGAIN1 and ADCGAIN2 to get the 12-bit gain value
-        let adc_gain: u16 = (((adc_gain2 & 0xF0) as u16) << 4) | (adc_gain1 as u16);
-        let adc_offset: u8 = adc_offset;
-
-        // Convert raw TS1 ADC to temperature (in dC, deci-Celsius)
-        // T_TS1 (°C) = (ADC_TS1 * ADC_GAIN + ADC_OFFSET) * 1e-6
-        // T_TS1 (dC) = (ADC_TS1 * ADC_GAIN + ADC_OFFSET) * 1e-5
-        let raw_adc_ts1: u16 = ((raw_ts1[0] as u16) << 6) | ((raw_ts1[1] as u16) >> 2);
-        let t_ts1_udc: u32 = (raw_adc_ts1 as u32 * adc_gain as u32) + adc_offset as u32;
-        let ts1_temp_dc = (t_ts1_udc / 100) as i16; // Convert uV to dC and cast to i16
-
-        let mut ts2_temp_dc: Option<i16> = None;
-        #[cfg(any(feature = "bq76930", feature = "bq76940"))]
-        {
-            // Read TS2_HI and TS2_LO registers (2 bytes) for BQ76930/40
-            let raw_ts2 = self.read_registers(Register::TS2_HI, 2).await?;
-            let raw_adc_ts2: u16 = ((raw_ts2[0] as u16) << 6) | ((raw_ts2[1] as u16) >> 2);
-            let t_ts2_udc: u32 = (raw_adc_ts2 as u32 * adc_gain as u32) + adc_offset as u32;
-            ts2_temp_dc = Some((t_ts2_udc / 100) as i16);
-        }
-
-        let mut ts3_temp_dc: Option<i16> = None;
-        #[cfg(feature = "bq76940")]
-        {
-            // Read TS3_HI and TS3_LO registers (2 bytes) for BQ76940
-            let raw_ts3 = self.read_registers(Register::TS3_HI, 2).await?;
-            let raw_adc_ts3: u16 = ((raw_ts3[0] as u16) << 6) | ((raw_ts3[1] as u16) >> 2);
-            let t_ts3_udc: u32 = (raw_adc_ts3 as u32 * adc_gain as u32) + adc_offset as u32;
-            ts3_temp_dc = Some((t_ts3_udc / 100) as i16);
-        }
-
-
-        Ok(Temperatures {
-            ts1: ts1_temp_dc,
-            ts2: ts2_temp_dc,
-            ts3: ts3_temp_dc,
+        Ok(ChargerStatus {
+            stat_ac: (msb & registers::CHARGER_STATUS_STAT_AC) != 0,
+            ico_done: (msb & registers::CHARGER_STATUS_ICO_DONE) != 0,
+            in_vap: (msb & registers::CHARGER_STATUS_IN_VAP) != 0,
+            in_vindpm: (msb & registers::CHARGER_STATUS_IN_VINDPM) != 0,
+            in_iin_dpm: (msb & registers::CHARGER_STATUS_IN_IIN_DPM) != 0,
+            in_fchrg: (msb & registers::CHARGER_STATUS_IN_FCHRG) != 0,
+            in_pchrg: (msb & registers::CHARGER_STATUS_IN_PCHRG) != 0,
+            in_otg: (msb & registers::CHARGER_STATUS_IN_OTG) != 0,
+            fault_acov: (lsb & registers::CHARGER_STATUS_FAULT_ACOV) != 0,
+            fault_batoc: (lsb & registers::CHARGER_STATUS_FAULT_BATOC) != 0,
+            fault_acoc: (lsb & registers::CHARGER_STATUS_FAULT_ACOC) != 0,
+            fault_sysovp: (lsb & registers::CHARGER_STATUS_FAULT_SYSOVP) != 0,
+            fault_vsys_uvp: (lsb & registers::CHARGER_STATUS_FAULT_VSYS_UVP) != 0,
+            fault_force_converter_off: (lsb & registers::CHARGER_STATUS_FAULT_FORCE_CONVERTER_OFF)
+                != 0,
+            fault_otg_ovp: (lsb & registers::CHARGER_STATUS_FAULT_OTG_OVP) != 0,
+            fault_otg_uvp: (lsb & registers::CHARGER_STATUS_FAULT_OTG_UVP) != 0,
         })
     }
 
-    /// Reads the raw Coulomb Counter value.
-    /// Conversion to current (A) requires CC_CFG and Rsense value.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_current(&mut self) -> Result<Current, Error<E>> {
-        // Read CC_HI and CC_LO registers (2 bytes)
-        let raw_cc_bytes = self.read_registers(Register::CC_HI, 2).await?;
+    /// Reads the Prochot Status register.
+    pub async fn read_prochot_status(&mut self) -> Result<ProchotStatus, Error<E>> {
+        let raw_status = self.read_registers(Register::ProchotStatusMsb, 2).await?;
+        let lsb = raw_status.as_ref()[0]; // ProchotStatus LSB (0x22)
+        let msb = raw_status.as_ref()[1]; // ProchotStatus MSB (0x23)
 
-        // Combine bytes to get a signed 16-bit raw CC value
-        let raw_cc: i16 = i16::from_be_bytes([raw_cc_bytes[0], raw_cc_bytes[1]]);
+        // Read ChargeOption4 LSB (0x3C) for stat_idchg2 and stat_ptm
+        let raw_charge_option4 = self.read_registers(Register::ChargeOption4, 1).await?;
+        let charge_option4_lsb = raw_charge_option4.as_ref()[0]; // ChargeOption4 LSB (0x3C)
 
-        // TODO: Implement conversion from raw CC to current (A) based on CC_CFG and Rsense.
-        // The exact formula depends on the CC_CFG register settings and the sense resistor value.
-        // Refer to the datasheet "16-Bit CC FOR PACK CURRENT MEASUREMENT" section.
-
-        Ok(Current { raw_cc })
+        Ok(ProchotStatus {
+            en_prochot_ext: (msb & registers::PROCHOT_STATUS_EN_PROCHOT_EXT) != 0,
+            prochot_width: (msb & registers::PROCHOT_STATUS_PROCHOT_WIDTH) >> 4,
+            prochot_clear: (msb & registers::PROCHOT_STATUS_PROCHOT_CLEAR) != 0,
+            stat_vap_fail: (msb & registers::PROCHOT_STATUS_STAT_VAP_FAIL) != 0,
+            stat_exit_vap: (msb & registers::PROCHOT_STATUS_STAT_EXIT_VAP) != 0,
+            stat_vindpm: (lsb & registers::PROCHOT_STATUS_STAT_VINDPM) != 0,
+            stat_comp: (lsb & registers::PROCHOT_STATUS_STAT_COMP) != 0,
+            stat_icrit: (lsb & registers::PROCHOT_STATUS_STAT_ICRIT) != 0,
+            stat_inom: (lsb & registers::PROCHOT_STATUS_STAT_INOM) != 0,
+            stat_idchg1: (lsb & registers::PROCHOT_STATUS_STAT_IDCHG1) != 0,
+            stat_vsys: (lsb & registers::PROCHOT_STATUS_STAT_VSYS) != 0,
+            stat_bat_removal: (lsb & registers::PROCHOT_STATUS_STAT_BAT_REMOVAL) != 0,
+            stat_adpt_removal: (lsb & registers::PROCHOT_STATUS_STAT_ADPT_REMOVAL) != 0,
+            stat_idchg2: (charge_option4_lsb & registers::CHARGE_OPTION4_STAT_IDCHG2) != 0,
+            stat_ptm: (charge_option4_lsb & registers::CHARGE_OPTION4_STAT_PTM) != 0,
+        })
+    }
+    /// Reads all ADC measurement registers.
+    pub async fn read_adc_measurements(&mut self) -> Result<AdcMeasurements, Error<E>> {
+        let raw_measurements = self.read_registers(Register::ADCPSYS, 8).await?;
+        Ok(AdcMeasurements::from_register_values(
+            raw_measurements.as_ref()[0], // ADCPSYS
+            raw_measurements.as_ref()[1], // ADCVBUS
+            raw_measurements.as_ref()[2], // ADCIDCHG
+            raw_measurements.as_ref()[3], // ADCICHG
+            raw_measurements.as_ref()[4], // ADCCMPIN
+            raw_measurements.as_ref()[5], // ADCIIN
+            raw_measurements.as_ref()[6], // ADCVBAT
+            raw_measurements.as_ref()[7], // ADCVSYS
+        ))
     }
 
-    /// Reads the System Status register.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn read_status(&mut self) -> Result<u8, Error<E>> {
-        self.read_register(Register::SYS_STAT).await
+    /// Reads the Charge Current register and returns the value in mA.
+    pub async fn read_charge_current(&mut self) -> Result<ChargeCurrent, Error<E>> {
+        let raw_current = self.read_registers(Register::ChargeCurrentMsb, 2).await?;
+        Ok(ChargeCurrent::from_register_value(
+            raw_current.as_ref()[1],
+            raw_current.as_ref()[0],
+        ))
     }
 
-    /// Clears the specified status flags in the System Status register.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn clear_status_flags(&mut self, flags: u8) -> Result<(), Error<E>> {
-        // To clear a flag, write a '1' to the corresponding bit.
-        self.write_register(Register::SYS_STAT, flags).await
+    /// Writes the Charge Current register with the value in mA.
+    pub async fn set_charge_current(&mut self, current: ChargeCurrent) -> Result<(), Error<E>> {
+        let (msb, lsb) = current.to_msb_lsb_bytes();
+        // ChargeCurrent is a 13-bit register (03/02h). Write to LSB (0x02) first.
+        self.write_registers(Register::ChargeCurrent, &[lsb, msb])
+            .await
     }
 
-    /// Enables the charging FET.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn enable_charging(&mut self) -> Result<(), Error<E>> {
-        let mut sys_ctrl2 = self.read_register(Register::SYS_CTRL2).await?;
-        sys_ctrl2 |= SYS_CTRL2_CHG_ON;
-        self.write_register(Register::SYS_CTRL2, sys_ctrl2).await
+    /// Reads the Charge Voltage register and returns the value in mV.
+    pub async fn read_charge_voltage(&mut self) -> Result<ChargeVoltage, Error<E>> {
+        let raw_voltage = self.read_registers(Register::ChargeVoltageMsb, 2).await?;
+        Ok(ChargeVoltage::from_register_value(
+            raw_voltage.as_ref()[1],
+            raw_voltage.as_ref()[0],
+        ))
     }
 
-    /// Disables the charging FET.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn disable_charging(&mut self) -> Result<(), Error<E>> {
-        let mut sys_ctrl2 = self.read_register(Register::SYS_CTRL2).await?;
-        sys_ctrl2 &= !SYS_CTRL2_CHG_ON;
-        self.write_register(Register::SYS_CTRL2, sys_ctrl2).await
+    /// Writes the Charge Voltage register with the value in mV.
+    pub async fn set_charge_voltage(&mut self, voltage: ChargeVoltage) -> Result<(), Error<E>> {
+        let (msb, lsb) = voltage.to_msb_lsb_bytes();
+        // ChargeVoltage is a 12-bit register (05/04h). Write to LSB (0x04) first.
+        self.write_registers(Register::ChargeVoltage, &[lsb, msb])
+            .await
     }
 
-    /// Enables the discharging FET.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn enable_discharging(&mut self) -> Result<(), Error<E>> {
-        let mut sys_ctrl2 = self.read_register(Register::SYS_CTRL2).await?;
-        sys_ctrl2 |= SYS_CTRL2_DSG_ON;
-        self.write_register(Register::SYS_CTRL2, sys_ctrl2).await
+    /// Reads the OTG Voltage register and returns the value in mV.
+    pub async fn read_otg_voltage(&mut self) -> Result<OtgVoltage, Error<E>> {
+        let raw_voltage = self.read_registers(Register::OTGVoltageMsb, 2).await?;
+        Ok(OtgVoltage::from_register_value(
+            raw_voltage.as_ref()[1],
+            raw_voltage.as_ref()[0],
+        ))
     }
 
-    /// Disables the discharging FET.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn disable_discharging(&mut self) -> Result<(), Error<E>> {
-        let mut sys_ctrl2 = self.read_register(Register::SYS_CTRL2).await?;
-        sys_ctrl2 &= !SYS_CTRL2_DSG_ON;
-        self.write_register(Register::SYS_CTRL2, sys_ctrl2).await
+    /// Writes the OTG Voltage register with the value in mV.
+    pub async fn set_otg_voltage(&mut self, voltage: OtgVoltage) -> Result<(), Error<E>> {
+        let (msb, lsb) = voltage.to_msb_lsb_bytes();
+        // OTGVoltage is an 11-bit register (07/06h). Write to LSB (0x06) first.
+        self.write_registers(Register::OTGVoltage, &[lsb, msb])
+            .await
     }
 
-    /// Sets the cell balancing state.
-    /// The `mask` is a bitmask where bit n corresponds to cell n+1.
-    /// E.g., bit 0 for Cell 1, bit 4 for Cell 5, bit 9 for Cell 10, bit 14 for Cell 15.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn set_cell_balancing(&mut self, mask: u16) -> Result<(), Error<E>> {
-        // Write to CELLBAL1 (Cells 1-5)
-        let cellbal1_mask = (mask & 0x1F) as u8; // Bits 0-4
-        self.write_register(Register::CELLBAL1, cellbal1_mask).await?;
-
-        #[cfg(any(feature = "bq76930", feature = "bq76940"))]
-        {
-            // Write to CELLBAL2 (Cells 6-10) for BQ76930/40
-            let cellbal2_mask = ((mask >> 5) & 0x1F) as u8; // Bits 5-9
-            self.write_register(Register::CELLBAL2, cellbal2_mask).await?;
-        }
-
-        #[cfg(feature = "bq76940")]
-        {
-            // Write to CELLBAL3 (Cells 11-15) for BQ76940
-            let cellbal3_mask = ((mask >> 10) & 0x1F) as u8; // Bits 10-14
-            self.write_register(Register::CELLBAL3, cellbal3_mask).await?;
-        }
-
-        Ok(())
+    /// Reads the OTG Current register and returns the value in mA.
+    pub async fn read_otg_current(&mut self) -> Result<OtgCurrent, Error<E>> {
+        let raw_current = self.read_registers(Register::OTGCurrentMsb, 2).await?;
+        Ok(OtgCurrent::from_register_value(
+            raw_current.as_ref()[1],
+            raw_current.as_ref()[0],
+        ))
     }
 
-    /// Enters the SHIP mode.
-    /// WARNING: Refer to the datasheet for the exact sequence to enter SHIP mode.
-    /// This is a placeholder based on common patterns.
-    #[maybe_async_cfg::maybe(sync, async)]
+    /// Writes the OTG Current register with the value in mA.
+    pub async fn set_otg_current(&mut self, current: OtgCurrent) -> Result<(), Error<E>> {
+        let (msb, lsb) = current.to_msb_lsb_bytes();
+        // OTGCurrent is a 10-bit register (09/08h). Write to LSB (0x08) first.
+        self.write_registers(Register::OTGCurrent, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the Input Voltage register and returns the value in mV.
+    pub async fn read_input_voltage(&mut self) -> Result<InputVoltage, Error<E>> {
+        let raw_voltage = self.read_registers(Register::InputVoltageMsb, 2).await?;
+        Ok(InputVoltage::from_register_value(
+            raw_voltage.as_ref()[1],
+            raw_voltage.as_ref()[0],
+        ))
+    }
+    /// Writes the Input Voltage register with the value in mV.
+    pub async fn set_input_voltage(&mut self, voltage: InputVoltage) -> Result<(), Error<E>> {
+        let (msb, lsb) = voltage.to_msb_lsb_bytes();
+        // InputVoltage is a 8-bit register (0B/0Ah). Write to LSB (0x0A) first.
+        self.write_registers(Register::InputVoltage, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the Minimum System Voltage register and returns the value in mV.
+    pub async fn read_vsys_min(&mut self) -> Result<VsysMin, Error<E>> {
+        let raw_voltage = self.read_register(Register::VsysMin).await?;
+        Ok(VsysMin::from_register_value(raw_voltage))
+    }
+
+    /// Writes the Minimum System Voltage register with the value in mV.
+    pub async fn set_vsys_min(&mut self, voltage: VsysMin) -> Result<(), Error<E>> {
+        let raw_value = voltage.to_register_value();
+        let lsb = (raw_value & 0xFF) as u8;
+        let msb = ((raw_value >> 8) & 0x0F) as u8; // 12-bit value, MSB uses bits 0-3
+        self.write_registers(Register::VsysMinMsb, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the IIN_HOST register and returns the value in mA.
+    pub async fn read_iin_host(&mut self) -> Result<IinHost, Error<E>> {
+        let raw_current = self.read_register(Register::IinHost).await?;
+        Ok(IinHost::from_register_value(raw_current))
+    }
+
+    /// Writes the IIN_HOST register with the value in mA.
+    pub async fn set_iin_host(&mut self, current: IinHost) -> Result<(), Error<E>> {
+        let (msb, lsb) = current.to_msb_lsb_bytes();
+        // IIN_HOST is a 7-bit register (0F/0Eh). Write to LSB (0x0E) first.
+        self.write_registers(Register::IinHost, &[lsb, msb]).await
+    }
+
+    /// Reads the IIN_DPM register and returns the value in mA.
+    pub async fn read_iin_dpm(&mut self) -> Result<IinDpm, Error<E>> {
+        let raw_current = self.read_register(Register::IinDpm).await?;
+        Ok(IinDpm::from_register_value(raw_current))
+    }
+
+    /// Writes the IIN_DPM register with the value in mA.
+    pub async fn set_iin_dpm(&mut self, current: IinDpm) -> Result<(), Error<E>> {
+        let (msb, lsb) = current.to_msb_lsb_bytes();
+        // IIN_DPM is a 7-bit register (25/24h). Write to LSB (0x24) first.
+        self.write_registers(Register::IinDpm, &[lsb, msb]).await
+    }
+
+    /// Sets the ChargeOption0 register.
+    pub async fn set_charge_option0(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ChargeOption0 is a 16-bit register (01/00h). Write to LSB (0x00) first.
+        self.write_registers(Register::ChargeOption0, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ChargeOption0 register.
+    pub async fn read_charge_option0(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ChargeOption0Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ChargeOption1 register.
+    pub async fn set_charge_option1(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ChargeOption1 is a 16-bit register (31/30h). Write to LSB (0x30) first.
+        self.write_registers(Register::ChargeOption1, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ChargeOption1 register.
+    pub async fn read_charge_option1(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ChargeOption1Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ChargeOption2 register.
+    pub async fn set_charge_option2(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ChargeOption2 is a 16-bit register (33/32h). Write to LSB (0x32) first.
+        self.write_registers(Register::ChargeOption2, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ChargeOption2 register.
+    pub async fn read_charge_option2(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ChargeOption2Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ChargeOption3 register.
+    pub async fn set_charge_option3(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ChargeOption3 is a 16-bit register (35/34h). Write to LSB (0x34) first.
+        self.write_registers(Register::ChargeOption3, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ChargeOption3 register.
+    pub async fn read_charge_option3(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ChargeOption3Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ChargeOption4 register.
+    pub async fn set_charge_option4(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ChargeOption4 is a 16-bit register (3D/3Ch). Write to LSB (0x3C) first.
+        self.write_registers(Register::ChargeOption4, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ChargeOption4 register.
+    pub async fn read_charge_option4(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ChargeOption4Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ProchotOption0 register.
+    pub async fn set_prochot_option0(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ProchotOption0 is a 16-bit register (37/36h). Write to LSB (0x36) first.
+        self.write_registers(Register::ProchotOption0, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ProchotOption0 register.
+    pub async fn read_prochot_option0(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ProchotOption0Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ProchotOption1 register.
+    pub async fn set_prochot_option1(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ProchotOption1 is a 16-bit register (39/38h). Write to LSB (0x38) first.
+        self.write_registers(Register::ProchotOption1, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ProchotOption1 register.
+    pub async fn read_prochot_option1(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ProchotOption1Msb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the ADCOption register.
+    pub async fn set_adc_option(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        // ADCOption is a 16-bit register (3B/3Ah). Write to LSB (0x3A) first.
+        self.write_registers(Register::ADCOption, &[lsb, msb]).await
+    }
+
+    /// Reads the ADCOption register.
+    pub async fn read_adc_option(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::ADCOptionMsb, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Sets the VMIN_ACTIVE_PROTECTION register.
+    pub async fn set_vmin_active_protection(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
+        self.write_registers(Register::VminActiveProtection, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the VMIN_ACTIVE_PROTECTION register.
+    pub async fn read_vmin_active_protection(&mut self) -> Result<(u8, u8), Error<E>> {
+        let raw_options = self.read_registers(Register::VminActiveProtection, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    }
+
+    /// Enters ship mode.
+    /// Refer to the datasheet for the specific sequence to enter ship mode.
+    /// This is a placeholder implementation.
     pub async fn enter_ship_mode(&mut self) -> Result<(), Error<E>> {
-        // Placeholder sequence:
-        // 1. Write 0x00 to SYS_CTRL1
-        // 2. Write 0x00 to SYS_CTRL2
-        // 3. Write 0x00 to SYS_CTRL1
-        // 4. Write 0x10 to SYS_CTRL2 (example value, check datasheet)
-        // 5. Write 0x00 to SYS_CTRL1
-        // 6. Write 0x10 to SYS_CTRL2 (example value, check datasheet)
+        // Example: Write to a specific register to enter ship mode
+        // Replace with the actual register and value from the datasheet
+        // self.write_register(Register::SysCtrl1, 0x00).await?;
+        // self.write_register(Register::SysCtrl2, 0x00).await?;
+        // Add other steps as required by the datasheet
 
-        self.write_register(Register::SYS_CTRL1, 0x00).await?;
-        self.write_register(Register::SYS_CTRL2, 0x00).await?;
-        self.write_register(Register::SYS_CTRL1, 0x00).await?;
-        // Replace 0x10 with the actual value from the datasheet for SHIP mode entry
-        self.write_register(Register::SYS_CTRL2, 0x10).await?;
-        self.write_register(Register::SYS_CTRL1, 0x00).await?;
-        // Replace 0x10 with the actual value from the datasheet for SHIP mode entry
-        self.write_register(Register::SYS_CTRL2, 0x10).await?;
+        #[cfg(feature = "defmt")]
+        defmt::warn!("Entering ship mode (placeholder implementation)");
 
         Ok(())
-    }
-
-    /// Checks if the ALERT pin is being overridden by external control.
-    #[maybe_async_cfg::maybe(sync, async)]
-    pub async fn is_alert_overridden(&mut self) -> Result<bool, Error<E>> {
-        let sys_stat = self.read_status().await?;
-        Ok((sys_stat & SYS_STAT_OVRD_ALERT) != 0)
     }
 }
