@@ -1,0 +1,75 @@
+[package]
+name = "stm32g031-bq25730-example"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "stm32g031-bq25730-example"
+path = "src/main.rs"
+
+[dependencies]
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b2707486ca3eade5bf4b237edf3d6aa90f35", features = [
+  "defmt",
+  "time-driver-any",
+  "stm32g031g8",
+  "memory-x",
+  "unstable-pac",
+  "exti",
+] }
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b2707486ca3eade5bf4b237edf3d6aa90f35" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b2707486ca3eade5bf4b237edf3d6aa90f35", features = [
+  "arch-cortex-m",
+  "executor-thread",
+  "defmt",
+] }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b2707486ca3eade5bf4b237edf3d6aa90f35", features = [
+  "defmt",
+  "defmt-timestamp-uptime",
+  "tick-hz-32_768",
+] }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b2707486ca3eade5bf4b237edf3d6aa90f35", features = [
+  "defmt",
+] }
+
+defmt = { version = "1.0.1" }
+defmt-rtt = "0.4.0" # Add defmt-rtt for defmt exporter
+rtt-target = { version = "0.5.0" } # Add rtt-target for RTT initialization
+
+cortex-m = { version = "0.7.7", features = [
+  "inline-asm",
+  "critical-section-single-core",
+] }
+cortex-m-rt = "0.7.5"
+embedded-hal = "1.0.0"
+embedded-io-async = { version = "0.6.1" }
+panic-probe = { version = "0.3.0", features = ["print-defmt"] }
+heapless = { version = "0.8", default-features = false }
+portable-atomic = { version = "1.11.0", features = ["critical-section"] }
+static_cell = "2.1.0" # Add static_cell dependency
+libm = "0.2.8" # Add libm dependency
+uom = { version = "0.37", default-features = false, features = ["si", "i32"] }
+
+
+bq25730-async-rs = { path = "../../", features = ["async", "defmt"] }
+
+[profile.dev]
+opt-level = 's'
+debug = 2
+debug-assertions = true
+overflow-checks = true
+panic = "abort"         # Added panic handler
+codegen-units = 1       # Added for consistency with release profile
+
+[profile.release]
+codegen-units = 1
+debug = 0
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 'z'
+overflow-checks = false
+panic = "abort"          # Added panic handler
+
+[features]
+default = ["async"]
+async = []
