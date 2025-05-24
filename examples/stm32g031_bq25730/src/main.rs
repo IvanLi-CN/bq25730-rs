@@ -15,11 +15,9 @@ use embassy_stm32::{
     time::Hertz,
 };
 use embassy_time::{Duration, Timer};
-use cortex_m_rt as _;
+use cortex_m_rt::{entry, exception};
 
 // Import the BQ25730 driver crate
-use bq25730_async_rs::data_types::*;
-use bq25730_async_rs::registers::*;
 use bq25730_async_rs::Bq25730;
 
 // For sharing I2C bus
@@ -33,6 +31,7 @@ bind_interrupts!(struct Irqs {
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
+    // Removed rtt_init_print!(); to avoid duplicate symbol error
     info!("Starting BQ25730 STM32G031 example...");
 
     let config = embassy_stm32::Config::default();
@@ -251,4 +250,14 @@ async fn main(_spawner: Spawner) {
         // Wait for 1 second
         Timer::after(Duration::from_secs(1)).await;
     }
+}
+
+#[defmt::panic_handler]
+fn panic() -> ! {
+    cortex_m::asm::udf();
+}
+
+#[exception]
+unsafe fn HardFault(_frame: &cortex_m_rt::ExceptionFrame) -> ! {
+    cortex_m::asm::udf();
 }

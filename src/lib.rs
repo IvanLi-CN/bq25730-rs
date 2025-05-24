@@ -504,29 +504,24 @@ where
 
     /// Sets the VMIN_ACTIVE_PROTECTION register.
     pub async fn set_vmin_active_protection(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
-        self.write_registers(Register::VminActiveProtection, &[lsb, msb])
+        // VMIN_ACTIVE_PROTECTION is a 16-bit register (3F/3Eh). Write to LSB (0x3E) first.
+        self.write_registers(Register::VMINActiveProtection, &[lsb, msb])
             .await
     }
 
     /// Reads the VMIN_ACTIVE_PROTECTION register.
     pub async fn read_vmin_active_protection(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::VminActiveProtection, 2).await?;
+        let raw_options = self
+            .read_registers(Register::VMINActiveProtectionMsb, 2)
+            .await?;
         Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
     }
 
     /// Enters ship mode.
-    /// Refer to the datasheet for the specific sequence to enter ship mode.
-    /// This is a placeholder implementation.
     pub async fn enter_ship_mode(&mut self) -> Result<(), Error<E>> {
-        // Example: Write to a specific register to enter ship mode
-        // Replace with the actual register and value from the datasheet
-        // self.write_register(Register::SysCtrl1, 0x00).await?;
-        // self.write_register(Register::SysCtrl2, 0x00).await?;
-        // Add other steps as required by the datasheet
-
-        #[cfg(feature = "defmt")]
-        defmt::warn!("Entering ship mode (placeholder implementation)");
-
-        Ok(())
+        // To enter ship mode, write 0x0013 to the ShipMode register (0x40).
+        // This is a 16-bit register. LSB is 0x13, MSB is 0x00.
+        self.write_registers(registers::Register::ShipMode, &[0x13, 0x00])
+            .await
     }
 }

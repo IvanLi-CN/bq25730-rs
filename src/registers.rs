@@ -93,10 +93,12 @@ pub enum Register {
     ChargeOption4 = 0x3C,
     /// ChargeOption4 MSB Register
     ChargeOption4Msb = 0x3D,
-    /// Vmin Active Protection LSB Register
-    VminActiveProtection = 0x3E,
-    /// Vmin Active Protection MSB Register
-    VminActiveProtectionMsb = 0x3F,
+    /// VMIN Active Protection LSB Register
+    VMINActiveProtection = 0x3E,
+    /// VMIN Active Protection MSB Register
+    VMINActiveProtectionMsb = 0x3F,
+    /// Ship Mode Register
+    ShipMode = 0x40,
     /// Shutdown Control Register
     ShutdownControl = 0x18, // Found in section 8.3.1.14
 }
@@ -255,7 +257,7 @@ pub const CHARGE_OPTION4_PP_IDCHG2: u8 = 1 << 2;
 pub const CHARGE_OPTION4_STAT_IDCHG2: u8 = 1 << 1;
 pub const CHARGE_OPTION4_STAT_PTM: u8 = 1 << 0;
 
-// Vmin Active Protection (3F/3Eh) bit masks
+// VMIN Active Protection (3F/3Eh) bit masks
 pub const VMIN_ACTIVE_PROTECTION_VBUS_VAP_TH: u8 = 0b1111111 << 1;
 
 pub const VMIN_ACTIVE_PROTECTION_VSYS_TH2: u8 = 0b111111 << 2;
