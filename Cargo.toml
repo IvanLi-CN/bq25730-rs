@@ -18,6 +18,7 @@ defmt = { version = "1.0.1", optional = true } # Add defmt dependency
 [dev-dependencies]
 embedded-hal-mock = "0.11"
 tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread"] }
+bq25730 = { path = ".", package = "bq25730-async-rs" }
 
 [profile.dev]
 # Rust debug is too slow.
@@ -34,7 +35,5 @@ opt-level = 's'
 overflow-checks = false
 
 [features]
-default = ["async", "bq25730"]
 async = ["dep:embedded-hal-async"]
-defmt = ["dep:defmt"] # Add defmt feature
-bq25730 = []
+defmt = ["dep:defmt"]

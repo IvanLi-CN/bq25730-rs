@@ -3,6 +3,7 @@
 extern crate defmt; // Make defmt available for derive macros
 
 use core::ops::{Deref, DerefMut};
+
 #[cfg(not(feature = "async"))]
 use embedded_hal::i2c::I2c;
 #[cfg(feature = "async")]
@@ -16,48 +17,45 @@ pub use errors::Error;
 use registers::Register; // Use BQ25730 registers
 
 /// Trait for abstracting register access, with or without CRC.
+#[maybe_async_cfg::maybe(
+    sync(cfg(not(feature = "async")), self = "RegisterAccess",),
+    async(feature = "async", keep_self)
+)]
+#[allow(async_fn_in_trait)]
 pub trait RegisterAccess<E> {
     /// The buffer type used for reading multiple registers.
     type ReadBuffer: Default + Extend<u8> + Deref<Target = [u8]> + DerefMut + Sized;
     /// The buffer type used for reading multiple registers.
-
     /// Reads a single register.
-    fn read_register(
-        &mut self,
-        reg: Register,
-    ) -> impl core::future::Future<Output = Result<u8, Error<E>>>;
+    async fn read_register(&mut self, reg: Register) -> Result<u8, Error<E>>;
 
     /// Reads multiple registers starting from `reg`.
-    fn read_registers(
+    async fn read_registers(
         &mut self,
         reg: Register,
         len: usize,
-    ) -> impl core::future::Future<Output = Result<Self::ReadBuffer, Error<E>>>;
+    ) -> Result<Self::ReadBuffer, Error<E>>;
 
     /// Writes a single register.
-    fn write_register(
-        &mut self,
-        reg: Register,
-        value: u8,
-    ) -> impl core::future::Future<Output = Result<(), Error<E>>>;
+    async fn write_register(&mut self, reg: Register, value: u8) -> Result<(), Error<E>>;
 
     /// Writes multiple registers starting from `reg`.
-    fn write_registers(
-        &mut self,
-        reg: Register,
-        values: &[u8],
-    ) -> impl core::future::Future<Output = Result<(), Error<E>>>;
+    async fn write_registers(&mut self, reg: Register, values: &[u8]) -> Result<(), Error<E>>;
 }
 
 /// BQ25730 driver
 pub struct Bq25730<I2C>
 where
-    I2C: I2c,
+    I2C: I2c + 'static, // Add 'static lifetime bound
 {
     address: u8,
     pub i2c: I2C, // Make i2c field public for testing
 }
-
+/// Trait for abstracting register access, with or without CRC.
+#[maybe_async_cfg::maybe(
+    sync(cfg(not(feature = "async")), self = "Bq25730",),
+    async(feature = "async", keep_self)
+)]
 impl<I2C, E> Bq25730<I2C>
 where
     I2C: I2c<Error = E>,
@@ -69,10 +67,7 @@ where
     /// * `i2c` - The I2C peripheral.
     /// * `address` - The I2C address of the BQ25730 chip.
     pub fn new(i2c: I2C, address: u8) -> Self {
-        Self {
-            address,
-            i2c,
-        }
+        Self { address, i2c }
     }
 
     /// Returns the I2C address of the BQ25730 chip.
@@ -81,6 +76,11 @@ where
     }
 }
 
+/// Trait for abstracting register access, with or without CRC.
+#[maybe_async_cfg::maybe(
+    sync(cfg(not(feature = "async")), self = "Bq25730",),
+    async(feature = "async", keep_self)
+)]
 impl<I2C, E> RegisterAccess<E> for Bq25730<I2C>
 where
     I2C: I2c<Error = E> + Send,
@@ -147,7 +147,10 @@ where
     }
 }
 
-
+#[maybe_async_cfg::maybe(
+    sync(cfg(not(feature = "async")), self = "Bq25730",),
+    async(feature = "async", keep_self)
+)]
 impl<I2C, E> Bq25730<I2C>
 where
     I2C: I2c<Error = E> + Send,
@@ -278,7 +281,7 @@ where
         let vsys = self.read_register(Register::ADCVSYS).await?;
 
         Ok(AdcMeasurements::from_register_values(
-            psys, vbus, idchg, ichg, cmpin, iin, vbat, vsys,
+            &[psys, vbus, idchg, ichg, cmpin, iin, vbat, vsys],
         ))
     }
 
@@ -391,7 +394,8 @@ where
 
     /// Writes the IIN_HOST register with the value in mA.
     pub async fn set_iin_host(&mut self, current: IinHost) -> Result<(), Error<E>> {
-        self.write_register(Register::IinHost, current.to_register_value()).await
+        self.write_register(Register::IinHost, current.to_register_value())
+            .await
     }
 
     /// Reads the IIN_DPM register and returns the value in mA.
@@ -402,7 +406,8 @@ where
 
     /// Writes the IIN_DPM register with the value in mA.
     pub async fn set_iin_dpm(&mut self, current: IinDpm) -> Result<(), Error<E>> {
-        self.write_register(Register::IinDpm, current.to_register_value()).await
+        self.write_register(Register::IinDpm, current.to_register_value())
+            .await
     }
 
     /// Sets the ChargeOption0 register.
@@ -466,8 +471,7 @@ where
     /// Sets the ChargeOption4 register.
     pub async fn set_charge_option4(&mut self, lsb: u8) -> Result<(), Error<E>> {
         // ChargeOption4 is an 8-bit register (0x3C).
-        self.write_register(Register::ChargeOption4, lsb)
-            .await
+        self.write_register(Register::ChargeOption4, lsb).await
     }
 
     /// Reads the ChargeOption4 register.
@@ -525,7 +529,9 @@ where
 
     /// Reads the VMINActiveProtection register.
     pub async fn read_vmin_active_protection(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::VMINActiveProtection, 2).await?;
+        let raw_options = self
+            .read_registers(Register::VMINActiveProtection, 2)
+            .await?;
         Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
     }
 
@@ -544,3 +550,6 @@ where
         Ok(())
     }
 }
+
+/// The default I2C address for the BQ25730 chip.
+pub const BQ25730_I2C_ADDRESS: u8 = 0x6B;

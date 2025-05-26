@@ -82,7 +82,7 @@ pub struct ChargeCurrent(pub u16);
 
 impl ChargeCurrent {
     /// LSB value for Charge Current in mA (with 5mΩ sense resistor).
-    pub const LSB_MA: u16 = 64;
+    pub const LSB_MA: u16 = 128; // 128mA/LSB for 5mΩ sense resistor
 
     /// Creates a new ChargeCurrent from a raw 13-bit register value.
     /// The value is stored across two bytes (MSB at 0x03, LSB at 0x02).
@@ -102,8 +102,8 @@ impl ChargeCurrent {
         // ChargeCurrent is a 13-bit value (D12-D0)
         // MSB (0x03): D12-D8 in bits 4:0
         // LSB (0x02): D7-D0 in bits 7:0
-        let msb = ((raw_value >> 8) & 0x1F) as u8; // D12-D8
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0
+        let msb = ((raw_value >> 8) & 0x1F) as u8; // D12-D8 in bits 4:0 of MSB (0x03)
+        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x02)
         (msb, lsb)
     }
 }
@@ -127,8 +127,8 @@ impl ChargeVoltage {
         // ChargeVoltage is a 12-bit value (D11-D0)
         // MSB (0x05) contains D11-D4
         // LSB (0x04) contains D3-D0
-        let raw_value = ((msb as u16) << 4) | ((lsb >> 4) as u16);
-        ChargeVoltage(1024 + raw_value * Self::LSB_MV) // Add 1024mV offset
+        let raw_value = ((msb as u16) << 4) | ((lsb >> 4) as u16); // D11-D0
+        ChargeVoltage(1024 + raw_value * Self::LSB_MV) // Add 1024mV offset (from 1.024V)
     }
 
     /// Converts the ChargeVoltage to raw MSB and LSB register values.
@@ -137,8 +137,8 @@ impl ChargeVoltage {
     /// LSB (0x04): D3-D0 in bits 7:4
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = (self.0 - 1024) / Self::LSB_MV; // Subtract 1024mV offset
-        let msb = (raw_value >> 4) as u8; // D11-D4 in bits 7:0
-        let lsb = ((raw_value & 0x0F) << 4) as u8; // D3-D0 in bits 7:4
+        let msb = (raw_value >> 4) as u8; // D11-D4 in bits 7:4 of MSB (0x05)
+        let lsb = ((raw_value & 0x0F) << 4) as u8; // D3-D0 in bits 3:0 of LSB (0x04)
         (msb, lsb)
     }
 }
@@ -160,8 +160,8 @@ impl OtgVoltage {
     /// MSB (0x07): D10-D8 in bits 2:0
     /// LSB (0x06): D7-D0 in bits 7:0
     pub fn from_register_value(msb: u8, lsb: u8) -> Self {
-        let raw_value = (((msb & 0x07) as u16) << 8) | (lsb as u16);
-        OtgVoltage(raw_value * Self::LSB_MV + 3000) // Add offset
+        let raw_value = (((msb & 0x07) as u16) << 8) | (lsb as u16); // D10-D0
+        OtgVoltage(raw_value * Self::LSB_MV + 3000) // Add 3000mV offset (from 3.0V)
     }
 
     /// Converts the OtgVoltage to raw MSB and LSB register values.
@@ -173,9 +173,9 @@ impl OtgVoltage {
     /// MSB (0x07): D10-D8 in bits 2:0
     /// LSB (0x06): D7-D0 in bits 7:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = (self.0 - 3000) / Self::LSB_MV; // Subtract offset
-        let msb = ((raw_value >> 8) & 0x07) as u8; // D10-D8 in bits 2:0
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0
+        let raw_value = (self.0 - 3000) / Self::LSB_MV; // Subtract 3000mV offset
+        let msb = ((raw_value >> 8) & 0x07) as u8; // D10-D8 in bits 2:0 of MSB (0x07)
+        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x06)
         (msb, lsb)
     }
 }
@@ -195,7 +195,7 @@ impl OtgCurrent {
     /// LSB (0x08): D7-D0 in bits 7:0
     pub fn from_register_value(msb: u8, lsb: u8) -> Self {
         // D9 is in bit 1 of MSB (0x09), D8 is in bit 0 of MSB (0x09)
-        let raw_value = (((msb & 0x03) as u16) << 8) | (lsb as u16);
+        let raw_value = (((msb & 0x03) as u16) << 8) | (lsb as u16); // D9-D0
         OtgCurrent(raw_value * Self::LSB_MA)
     }
 
@@ -212,12 +212,13 @@ impl OtgCurrent {
         // OTGCurrent is a 10-bit value (D9-D0)
         // MSB (0x09): D9-D8 in bits 1:0
         // LSB (0x08): D7-D0 in bits 7:0
-        let msb = ((raw_value >> 8) & 0x03) as u8; // D9-D8
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0
+        let msb = ((raw_value >> 8) & 0x03) as u8; // D9-D8 in bits 1:0 of MSB (0x09)
+        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x08)
         (msb, lsb)
     }
     /// Converts the OtgCurrent to a raw 8-bit register value.
-    pub fn to_register_value(&self) -> u8 { // This function is likely not used for OtgCurrent as it's a 2-byte register.
+    pub fn to_register_value(&self) -> u8 {
+        // This function is likely not used for OtgCurrent as it's a 2-byte register.
         let raw_value = self.0 / Self::LSB_MA;
         (raw_value & 0xFF) as u8 // Return LSB part
     }
@@ -232,14 +233,14 @@ impl InputVoltage {
     /// LSB value for Input Voltage in mV.
     pub const LSB_MV: u16 = 64;
     /// Offset value for Input Voltage in mV.
-    pub const OFFSET_MV: u16 = 3200;
+    pub const OFFSET_MV: u16 = 3200; // 3200mV offset (from 3.2V)
 
     /// Creates a new InputVoltage from a raw 9-bit register value.
     /// The value is stored across two bytes (MSB at 0x0B, LSB at 0x0A).
     /// The 9-bit value is formed by `((msb & 0x01) << 8) | lsb`.
     pub fn from_register_value(msb: u8, lsb: u8) -> Self {
         // D8 is in bit 7 of MSB (0x0B)
-        let raw_value = (((msb >> 7) as u16) << 8) | (lsb as u16);
+        let raw_value = (((msb & 0x01) as u16) << 8) | (lsb as u16); // D8-D0 (D8 is bit 7 of MSB)
         InputVoltage(raw_value * Self::LSB_MV + Self::OFFSET_MV)
     }
 
@@ -249,9 +250,9 @@ impl InputVoltage {
     /// LSB (0x0A): D7-D0 in bits 7:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = (self.0 - Self::OFFSET_MV) / Self::LSB_MV;
-        let msb = ((raw_value >> 8) & 0x01) as u8; // D8
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0
-        (msb << 7, lsb) // Shift D8 to bit 7 of MSB byte
+        let msb = ((raw_value >> 8) & 0x01) as u8; // D8 in bit 7 of MSB (0x0B)
+        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x0A)
+        (msb << 7, lsb) // Shift D8 to bit 7 of MSB byte (0x0B)
     }
     /// Converts the InputVoltage to a raw 8-bit register value.
     /// This function is likely not used for InputVoltage as it's a 2-byte register.
@@ -289,9 +290,9 @@ pub struct IinHost(pub u16);
 
 impl IinHost {
     /// LSB value for Input Current Limit Set by Host in mA.
-    pub const LSB_MA: u16 = 50;
+    pub const LSB_MA: u16 = 100; // 100mA/LSB for 5mΩ sense resistor
     /// Offset value for Input Current Limit Set by Host in mA.
-    pub const OFFSET_MA: u16 = 50;
+    pub const OFFSET_MA: u16 = 100; // 100mA offset at code 0
 
     /// Creates a new IinHost from a raw 8-bit register value (LSB at 0x0E).
     pub fn from_register_value(lsb: u8) -> Self {
@@ -325,9 +326,9 @@ pub struct IinDpm(pub u16);
 
 impl IinDpm {
     /// LSB value for Input Current Limit in Use in mA.
-    pub const LSB_MA: u16 = 50;
+    pub const LSB_MA: u16 = 100; // 100mA/LSB for 5mΩ sense resistor
     /// Offset value for Input Current Limit in Use in mA.
-    pub const OFFSET_MA: u16 = 50;
+    pub const OFFSET_MA: u16 = 100; // 100mA offset at code 0
 
     /// Creates a new IinDpm from a raw 8-bit register value (LSB at 0x24).
     pub fn from_register_value(lsb: u8) -> Self {
@@ -361,7 +362,7 @@ pub struct AdcPsys(pub u16);
 
 impl AdcPsys {
     /// LSB value for ADC PSYS in mW (assuming 256mW/LSB, PSYS_RATIO=0).
-    pub const LSB_MW: u16 = 320; // Corrected from 256 to 320 (0.32W)
+    pub const LSB_MW: u16 = 1200; // 1200mW/LSB (1.2W/LSB) for PSYS (assuming 1uA/W gain and 10kohm resistor)
 
     /// Creates a new AdcPsys from a raw 8-bit register value (0x26).
     pub fn from_register_value(value: u8) -> Self {
@@ -376,7 +377,7 @@ pub struct AdcVbus(pub u16);
 
 impl AdcVbus {
     /// LSB value for ADC VBUS in mV.
-    pub const LSB_MV: u16 = 64;
+    pub const LSB_MV: u16 = 96; // 96mV/LSB
 
     /// Creates a new AdcVbus from a raw 8-bit register value (0x27).
     pub fn from_register_value(value: u8) -> Self {
@@ -391,7 +392,7 @@ pub struct AdcIdchg(pub u16);
 
 impl AdcIdchg {
     /// LSB value for ADC IDCHG in mA.
-    pub const LSB_MA: u16 = 64;
+    pub const LSB_MA: u16 = 512; // 512mA/LSB for 5mΩ sense resistor
 
     /// Creates a new AdcIdchg from a raw 8-bit register value (0x28).
     pub fn from_register_value(value: u8) -> Self {
@@ -406,7 +407,7 @@ pub struct AdcIchg(pub u16);
 
 impl AdcIchg {
     /// LSB value for ADC ICHG in mA.
-    pub const LSB_MA: u16 = 64;
+    pub const LSB_MA: u16 = 128; // 128mA/LSB for 5mΩ sense resistor
 
     /// Creates a new AdcIchg from a raw 8-bit register value (0x29).
     pub fn from_register_value(value: u8) -> Self {
@@ -421,7 +422,7 @@ pub struct AdcCmpin(pub u16);
 
 impl AdcCmpin {
     /// LSB value for ADC CMPIN in mV.
-    pub const LSB_MV: u16 = 64;
+    pub const LSB_MV: u16 = 12; // 12mV/LSB for ADC_FULLSCALE=1b
 
     /// Creates a new AdcCmpin from a raw 8-bit register value (0x2A).
     pub fn from_register_value(value: u8) -> Self {
@@ -436,7 +437,7 @@ pub struct AdcIin(pub u16);
 
 impl AdcIin {
     /// LSB value for ADC IIN in mA.
-    pub const LSB_MA: u16 = 50; // Corrected from 64 to 50
+    pub const LSB_MA: u16 = 100; // 100mA/LSB for 5mΩ sense resistor
 
     /// Creates a new AdcIin from a raw 8-bit register value (0x2B).
     pub fn from_register_value(value: u8) -> Self {
@@ -490,25 +491,16 @@ pub struct AdcMeasurements {
 
 impl AdcMeasurements {
     /// Creates a new AdcMeasurements struct from raw register values.
-    pub fn from_register_values(
-        psys: u8,
-        vbus: u8,
-        idchg: u8,
-        ichg: u8,
-        cmpin: u8,
-        iin: u8,
-        vbat: u8,
-        vsys: u8,
-    ) -> Self {
+    pub fn from_register_values(values: &[u8]) -> Self {
         Self {
-            psys: AdcPsys::from_register_value(psys),
-            vbus: AdcVbus::from_register_value(vbus),
-            idchg: AdcIdchg::from_register_value(idchg),
-            ichg: AdcIchg::from_register_value(ichg),
-            cmpin: AdcCmpin::from_register_value(cmpin),
-            iin: AdcIin::from_register_value(iin),
-            vbat: AdcVbat::from_register_value(vbat),
-            vsys: AdcVsys::from_register_value(vsys),
+            psys: AdcPsys::from_register_value(values[0]),
+            vbus: AdcVbus::from_register_value(values[1]),
+            idchg: AdcIdchg::from_register_value(values[2]),
+            ichg: AdcIchg::from_register_value(values[3]),
+            cmpin: AdcCmpin::from_register_value(values[4]),
+            iin: AdcIin::from_register_value(values[5]),
+            vbat: AdcVbat::from_register_value(values[6]),
+            vsys: AdcVsys::from_register_value(values[7]),
         }
     }
 }

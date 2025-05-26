@@ -2,8 +2,7 @@
 
 ## 任务目标
 
-为 BQ25730 驱动程序创建测试用例，参考 `/Volumes/ExData/Projects/Ivan/bq769x0-async-rs/tests/basic.rs` 和 `bq25730.pdf` 数据手册。
-你可以完全参考 `/Volumes/ExData/Projects/Ivan/bq769x0-async-rs/`，比如代码结构和依赖关系。
+为 BQ25730 驱动程序创建测试用例，参考 `tests/basic.rs` 和 `bq25730.pdf` 数据手册。
 
 - 只能完全编辑 `tests/basic.rs`。
 - 只能有限编辑 `src/lib.rs`（不得调整代码结构，不得修改或删除 struct、impl、trait 的定义，你只被允许增加新函数、修改现有函数体，一切可能超过授权范围的修改将都需要征得用户临时授权）。
@@ -23,7 +22,7 @@
 
 ## 测试用例分类
 
-### 1. 驱动程序初始化和基本功能测试
+### 1. 驱动程序初始化和基本功能˝测试
 
 - **测试 `new` 函数：** 验证 `Bq25730` 实例是否正确创建，并存储了 I2C 地址和 I2C 外设。
 - **测试 `init` 函数：**
@@ -138,4 +137,4 @@ graph TD
 - **其他寄存器读写函数：** 我将为 `ChargeOption1` 到 `ChargeOption4`、`ProchotOption0` 到 `ProchotOption1`、`ADCOption` 和 `VMINActiveProtection` 添加 `set_` 和 `read_` 函数，这些函数将直接操作原始字节，因为这些寄存器包含多个不相关的位字段，不适合创建单独的结构体。
 - **`enter_ship_mode`：** 已经存在，我将确保其写入的字节正确。
 
-我将确保所有新增或修改的函数都符合 Rust 的最佳实践和现有代码风格，特别是参考 `/Volumes/ExData/Projects/Ivan/bq769x0-async-rs/tests/basic.rs` 的风格。
+我将确保所有新增或修改的函数都符合 Rust 的最佳实践和现有代码风格，特别是参考 `tests/basic.rs` 的风格。

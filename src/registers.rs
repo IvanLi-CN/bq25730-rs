@@ -121,7 +121,6 @@ pub const CHARGE_OPTION0_EN_LDO: u8 = 1 << 2;
 pub const CHARGE_OPTION0_EN_IIN_DPM: u8 = 1 << 1;
 pub const CHARGE_OPTION0_CHRG_INHIBIT: u8 = 1 << 0;
 
-
 // ChargerStatus (21/20h) bit masks
 pub const CHARGER_STATUS_STAT_AC: u8 = 1 << 7;
 pub const CHARGER_STATUS_ICO_DONE: u8 = 1 << 6;
@@ -179,7 +178,7 @@ pub const CHARGE_OPTION2_EN_PKPWR_IIN_DPM: u8 = 1 << 5;
 pub const CHARGE_OPTION2_EN_PKPWR_VSYS: u8 = 1 << 4;
 pub const CHARGE_OPTION2_STAT_PKPWR_OVLD: u8 = 1 << 3;
 pub const CHARGE_OPTION2_STAT_PKPWR_RELAX: u8 = 1 << 2;
-pub const CHARGE_OPTION2_PKPWR_TMAX: u8 = 0b11 << 0;
+pub const CHARGE_OPTION2_PKPWR_TMAX: u8 = 0b11;
 
 pub const CHARGE_OPTION2_EN_EXTILIM: u8 = 1 << 7;
 pub const CHARGE_OPTION2_EN_ICHG_IDCHG: u8 = 1 << 6;
@@ -219,7 +218,7 @@ pub const PROCHOT_OPTION0_LOWER_PROCHOT_VINDPM: u8 = 1 << 0;
 
 // ProchotOption1 (39/38h) bit masks
 pub const PROCHOT_OPTION1_IDCHG_TH1: u8 = 0b111111 << 2;
-pub const PROCHOT_OPTION1_IDCHG_DEG1: u8 = 0b11 << 0;
+pub const PROCHOT_OPTION1_IDCHG_DEG1: u8 = 0b11;
 
 pub const PROCHOT_OPTION1_PP_VINDPM: u8 = 1 << 7;
 pub const PROCHOT_OPTION1_PP_COMP: u8 = 1 << 6;
