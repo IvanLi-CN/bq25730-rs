@@ -4,7 +4,6 @@
 use bq25730_async_rs::RegisterAccess; // Import the RegisterAccess trait
 use defmt::*;
 use {defmt_rtt as _, panic_probe as _};
-use rtt_target::{rtt_init_print, rprintln};
 
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_executor::Spawner;
@@ -15,7 +14,7 @@ use embassy_stm32::{
     time::Hertz,
 };
 use embassy_time::{Duration, Timer};
-use cortex_m_rt::{entry, exception};
+use cortex_m_rt::exception;
 
 // Import the BQ25730 driver crate
 use bq25730_async_rs::Bq25730;

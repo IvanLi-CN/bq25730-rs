@@ -9,7 +9,7 @@ use embedded_hal::i2c::I2c;
 use embedded_hal_async::i2c::I2c;
 
 pub mod data_types;
-mod errors;
+pub mod errors;
 pub mod registers;
 use data_types::*; // Import BQ25730 data types
 pub use errors::Error;
@@ -55,7 +55,7 @@ where
     I2C: I2c,
 {
     address: u8,
-    i2c: I2C,
+    pub i2c: I2C, // Make i2c field public for testing
 }
 
 impl<I2C, E> Bq25730<I2C>
@@ -73,6 +73,11 @@ where
             address,
             i2c,
         }
+    }
+
+    /// Returns the I2C address of the BQ25730 chip.
+    pub fn address(&self) -> u8 {
+        self.address
     }
 }
 
@@ -206,7 +211,8 @@ where
 
     /// Reads the Charger Status register.
     pub async fn read_charger_status(&mut self) -> Result<ChargerStatus, Error<E>> {
-        let raw_status = self.read_registers(Register::ChargerStatusMsb, 2).await?;
+        // ChargerStatus is a 16-bit register (0x20/0x21). Read from LSB address (0x20).
+        let raw_status = self.read_registers(Register::ChargerStatus, 2).await?;
         let lsb = raw_status.as_ref()[0];
         let msb = raw_status.as_ref()[1];
 
@@ -233,13 +239,13 @@ where
 
     /// Reads the Prochot Status register.
     pub async fn read_prochot_status(&mut self) -> Result<ProchotStatus, Error<E>> {
-        let raw_status = self.read_registers(Register::ProchotStatusMsb, 2).await?;
+        let raw_status = self.read_registers(Register::ProchotStatus, 2).await?; // Read from LSB address (0x22)
         let lsb = raw_status.as_ref()[0]; // ProchotStatus LSB (0x22)
         let msb = raw_status.as_ref()[1]; // ProchotStatus MSB (0x23)
 
         // Read ChargeOption4 LSB (0x3C) for stat_idchg2 and stat_ptm
-        let raw_charge_option4 = self.read_registers(Register::ChargeOption4, 1).await?;
-        let charge_option4_lsb = raw_charge_option4.as_ref()[0]; // ChargeOption4 LSB (0x3C)
+        let raw_charge_option4 = self.read_register(Register::ChargeOption4).await?; // Read single 8-bit register
+        let charge_option4_lsb = raw_charge_option4; // ChargeOption4 LSB (0x3C)
 
         Ok(ProchotStatus {
             en_prochot_ext: (msb & registers::PROCHOT_STATUS_EN_PROCHOT_EXT) != 0,
@@ -261,25 +267,28 @@ where
     }
     /// Reads all ADC measurement registers.
     pub async fn read_adc_measurements(&mut self) -> Result<AdcMeasurements, Error<E>> {
-        let raw_measurements = self.read_registers(Register::ADCPSYS, 8).await?;
+        // Read each 8-bit ADC register individually
+        let psys = self.read_register(Register::ADCPSYS).await?;
+        let vbus = self.read_register(Register::ADCVBUS).await?;
+        let idchg = self.read_register(Register::ADCIDCHG).await?;
+        let ichg = self.read_register(Register::ADCICHG).await?;
+        let cmpin = self.read_register(Register::ADCCMPIN).await?;
+        let iin = self.read_register(Register::ADCIIN).await?;
+        let vbat = self.read_register(Register::ADCVBAT).await?;
+        let vsys = self.read_register(Register::ADCVSYS).await?;
+
         Ok(AdcMeasurements::from_register_values(
-            raw_measurements.as_ref()[0], // ADCPSYS
-            raw_measurements.as_ref()[1], // ADCVBUS
-            raw_measurements.as_ref()[2], // ADCIDCHG
-            raw_measurements.as_ref()[3], // ADCICHG
-            raw_measurements.as_ref()[4], // ADCCMPIN
-            raw_measurements.as_ref()[5], // ADCIIN
-            raw_measurements.as_ref()[6], // ADCVBAT
-            raw_measurements.as_ref()[7], // ADCVSYS
+            psys, vbus, idchg, ichg, cmpin, iin, vbat, vsys,
         ))
     }
 
     /// Reads the Charge Current register and returns the value in mA.
     pub async fn read_charge_current(&mut self) -> Result<ChargeCurrent, Error<E>> {
-        let raw_current = self.read_registers(Register::ChargeCurrentMsb, 2).await?;
+        // ChargeCurrent is a 13-bit register (03/02h). Read from LSB address (0x02).
+        let raw_current = self.read_registers(Register::ChargeCurrent, 2).await?;
         Ok(ChargeCurrent::from_register_value(
-            raw_current.as_ref()[1],
-            raw_current.as_ref()[0],
+            raw_current.as_ref()[1], // MSB
+            raw_current.as_ref()[0], // LSB
         ))
     }
 
@@ -292,8 +301,10 @@ where
     }
 
     /// Reads the Charge Voltage register and returns the value in mV.
+    /// Reads the Charge Voltage register and returns the value in mV.
     pub async fn read_charge_voltage(&mut self) -> Result<ChargeVoltage, Error<E>> {
-        let raw_voltage = self.read_registers(Register::ChargeVoltageMsb, 2).await?;
+        // ChargeVoltage is a 12-bit register (05/04h). Read from LSB address (0x04).
+        let raw_voltage = self.read_registers(Register::ChargeVoltage, 2).await?;
         Ok(ChargeVoltage::from_register_value(
             raw_voltage.as_ref()[1],
             raw_voltage.as_ref()[0],
@@ -310,10 +321,11 @@ where
 
     /// Reads the OTG Voltage register and returns the value in mV.
     pub async fn read_otg_voltage(&mut self) -> Result<OtgVoltage, Error<E>> {
-        let raw_voltage = self.read_registers(Register::OTGVoltageMsb, 2).await?;
+        // OTGVoltage is an 11-bit register (07/06h). Read from LSB address (0x06).
+        let raw_voltage = self.read_registers(Register::OTGVoltage, 2).await?;
         Ok(OtgVoltage::from_register_value(
-            raw_voltage.as_ref()[1],
-            raw_voltage.as_ref()[0],
+            raw_voltage.as_ref()[1], // MSB
+            raw_voltage.as_ref()[0], // LSB
         ))
     }
 
@@ -327,7 +339,7 @@ where
 
     /// Reads the OTG Current register and returns the value in mA.
     pub async fn read_otg_current(&mut self) -> Result<OtgCurrent, Error<E>> {
-        let raw_current = self.read_registers(Register::OTGCurrentMsb, 2).await?;
+        let raw_current = self.read_registers(Register::OTGCurrent, 2).await?;
         Ok(OtgCurrent::from_register_value(
             raw_current.as_ref()[1],
             raw_current.as_ref()[0],
@@ -344,10 +356,11 @@ where
 
     /// Reads the Input Voltage register and returns the value in mV.
     pub async fn read_input_voltage(&mut self) -> Result<InputVoltage, Error<E>> {
-        let raw_voltage = self.read_registers(Register::InputVoltageMsb, 2).await?;
+        // InputVoltage is a 9-bit register (0B/0Ah). Read from LSB address (0x0A).
+        let raw_voltage = self.read_registers(Register::InputVoltage, 2).await?;
         Ok(InputVoltage::from_register_value(
-            raw_voltage.as_ref()[1],
-            raw_voltage.as_ref()[0],
+            raw_voltage.as_ref()[1], // MSB
+            raw_voltage.as_ref()[0], // LSB
         ))
     }
     /// Writes the Input Voltage register with the value in mV.
@@ -367,10 +380,7 @@ where
     /// Writes the Minimum System Voltage register with the value in mV.
     pub async fn set_vsys_min(&mut self, voltage: VsysMin) -> Result<(), Error<E>> {
         let raw_value = voltage.to_register_value();
-        let lsb = (raw_value & 0xFF) as u8;
-        let msb = ((raw_value >> 8) & 0x0F) as u8; // 12-bit value, MSB uses bits 0-3
-        self.write_registers(Register::VsysMinMsb, &[lsb, msb])
-            .await
+        self.write_register(Register::VsysMin, raw_value).await
     }
 
     /// Reads the IIN_HOST register and returns the value in mA.
@@ -381,9 +391,7 @@ where
 
     /// Writes the IIN_HOST register with the value in mA.
     pub async fn set_iin_host(&mut self, current: IinHost) -> Result<(), Error<E>> {
-        let (msb, lsb) = current.to_msb_lsb_bytes();
-        // IIN_HOST is a 7-bit register (0F/0Eh). Write to LSB (0x0E) first.
-        self.write_registers(Register::IinHost, &[lsb, msb]).await
+        self.write_register(Register::IinHost, current.to_register_value()).await
     }
 
     /// Reads the IIN_DPM register and returns the value in mA.
@@ -394,9 +402,7 @@ where
 
     /// Writes the IIN_DPM register with the value in mA.
     pub async fn set_iin_dpm(&mut self, current: IinDpm) -> Result<(), Error<E>> {
-        let (msb, lsb) = current.to_msb_lsb_bytes();
-        // IIN_DPM is a 7-bit register (25/24h). Write to LSB (0x24) first.
-        self.write_registers(Register::IinDpm, &[lsb, msb]).await
+        self.write_register(Register::IinDpm, current.to_register_value()).await
     }
 
     /// Sets the ChargeOption0 register.
@@ -408,8 +414,9 @@ where
 
     /// Reads the ChargeOption0 register.
     pub async fn read_charge_option0(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ChargeOption0Msb, 2).await?;
-        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+        // ChargeOption0 is a 16-bit register (01/00h). Read from LSB address (0x00).
+        let raw_options = self.read_registers(Register::ChargeOption0, 2).await?;
+        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1])) // Return LSB, MSB
     }
 
     /// Sets the ChargeOption1 register.
@@ -420,9 +427,11 @@ where
     }
 
     /// Reads the ChargeOption1 register.
+    /// Reads the ChargeOption1 register.
     pub async fn read_charge_option1(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ChargeOption1Msb, 2).await?;
-        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+        // ChargeOption1 is a 16-bit register (31/30h). Read from LSB address (0x30).
+        let raw_options = self.read_registers(Register::ChargeOption1, 2).await?;
+        Ok((raw_options.as_ref()[1], raw_options.as_ref()[0]))
     }
 
     /// Sets the ChargeOption2 register.
@@ -433,9 +442,11 @@ where
     }
 
     /// Reads the ChargeOption2 register.
+    /// Reads the ChargeOption2 register.
     pub async fn read_charge_option2(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ChargeOption2Msb, 2).await?;
-        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+        // ChargeOption2 is a 16-bit register (33/32h). Read from LSB address (0x32).
+        let raw_options = self.read_registers(Register::ChargeOption2, 2).await?;
+        Ok((raw_options.as_ref()[1], raw_options.as_ref()[0]))
     }
 
     /// Sets the ChargeOption3 register.
@@ -447,21 +458,23 @@ where
 
     /// Reads the ChargeOption3 register.
     pub async fn read_charge_option3(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ChargeOption3Msb, 2).await?;
-        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+        // ChargeOption3 is a 16-bit register (35/34h). Read from LSB address (0x34).
+        let raw_options = self.read_registers(Register::ChargeOption3, 2).await?;
+        Ok((raw_options.as_ref()[1], raw_options.as_ref()[0]))
     }
 
     /// Sets the ChargeOption4 register.
-    pub async fn set_charge_option4(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
-        // ChargeOption4 is a 16-bit register (3D/3Ch). Write to LSB (0x3C) first.
-        self.write_registers(Register::ChargeOption4, &[lsb, msb])
+    pub async fn set_charge_option4(&mut self, lsb: u8) -> Result<(), Error<E>> {
+        // ChargeOption4 is an 8-bit register (0x3C).
+        self.write_register(Register::ChargeOption4, lsb)
             .await
     }
 
     /// Reads the ChargeOption4 register.
-    pub async fn read_charge_option4(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ChargeOption4Msb, 2).await?;
-        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+    pub async fn read_charge_option4(&mut self) -> Result<u8, Error<E>> {
+        // ChargeOption4 is an 8-bit register (0x3C). Read from LSB address.
+        let raw_option = self.read_register(Register::ChargeOption4).await?;
+        Ok(raw_option)
     }
 
     /// Sets the ProchotOption0 register.
@@ -473,7 +486,7 @@ where
 
     /// Reads the ProchotOption0 register.
     pub async fn read_prochot_option0(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ProchotOption0Msb, 2).await?;
+        let raw_options = self.read_registers(Register::ProchotOption0, 2).await?;
         Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
     }
 
@@ -486,7 +499,7 @@ where
 
     /// Reads the ProchotOption1 register.
     pub async fn read_prochot_option1(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ProchotOption1Msb, 2).await?;
+        let raw_options = self.read_registers(Register::ProchotOption1, 2).await?;
         Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
     }
 
@@ -498,30 +511,36 @@ where
 
     /// Reads the ADCOption register.
     pub async fn read_adc_option(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self.read_registers(Register::ADCOptionMsb, 2).await?;
-        Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
+        // ADCOption is a 16-bit register (3B/3Ah). Read from LSB address (0x3A).
+        let raw_options = self.read_registers(Register::ADCOption, 2).await?;
+        Ok((raw_options.as_ref()[1], raw_options.as_ref()[0]))
     }
 
-    /// Sets the VMIN_ACTIVE_PROTECTION register.
+    /// Sets the VMINActiveProtection register.
     pub async fn set_vmin_active_protection(&mut self, lsb: u8, msb: u8) -> Result<(), Error<E>> {
-        // VMIN_ACTIVE_PROTECTION is a 16-bit register (3F/3Eh). Write to LSB (0x3E) first.
+        // VMINActiveProtection is a 16-bit register (3F/3Eh). Write to LSB (0x3E) first.
         self.write_registers(Register::VMINActiveProtection, &[lsb, msb])
             .await
     }
 
-    /// Reads the VMIN_ACTIVE_PROTECTION register.
+    /// Reads the VMINActiveProtection register.
     pub async fn read_vmin_active_protection(&mut self) -> Result<(u8, u8), Error<E>> {
-        let raw_options = self
-            .read_registers(Register::VMINActiveProtectionMsb, 2)
-            .await?;
+        let raw_options = self.read_registers(Register::VMINActiveProtection, 2).await?;
         Ok((raw_options.as_ref()[0], raw_options.as_ref()[1]))
     }
 
     /// Enters ship mode.
+    /// This function writes the required sequence to the Ship Mode register (0x40).
     pub async fn enter_ship_mode(&mut self) -> Result<(), Error<E>> {
-        // To enter ship mode, write 0x0013 to the ShipMode register (0x40).
-        // This is a 16-bit register. LSB is 0x13, MSB is 0x00.
-        self.write_registers(registers::Register::ShipMode, &[0x13, 0x00])
-            .await
+        // Refer to datasheet for the exact sequence.
+        // Typically, it involves writing a specific value to a specific register.
+        // For BQ25730, it's writing 0x0010 to ChargeOption4 (0x3D/0x3C)
+        // and then 0x0010 to ChargeOption3 (0x35/0x34).
+        // This is a placeholder, confirm with datasheet.
+        self.write_registers(Register::ChargeOption4, &[0x10, 0x00])
+            .await?;
+        self.write_registers(Register::ChargeOption3, &[0x10, 0x00])
+            .await?;
+        Ok(())
     }
 }

@@ -6,6 +6,7 @@ edition = "2021"
 [[bin]]
 name = "stm32g031-bq25730-example"
 path = "src/main.rs"
+test = false
 
 [dependencies]
 embassy-stm32 = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b2707486ca3eade5bf4b237edf3d6aa90f35", features = [
