@@ -2,11 +2,10 @@
 
 include!("common.rs");
 
-use bq25730_async_rs::{BQ25730_I2C_ADDRESS, RegisterAccess};
-use bq25730_async_rs::registers::Register;
 use bq25730_async_rs::errors::Error;
+use bq25730_async_rs::registers::Register;
+use bq25730_async_rs::{RegisterAccess, BQ25730_I2C_ADDRESS};
 use embedded_hal::i2c::ErrorKind;
-
 
 #[test]
 fn test_new() {
@@ -19,22 +18,29 @@ fn test_new() {
 #[test]
 fn test_init() -> Result<(), Error<ErrorKind>> {
     let expectations = [
-        // Set ChargeOption0: enable IIN_DPM (0x00)
+        // Read ChargeOption0 to preserve other settings
+        read_registers_transaction(
+            BQ25730_I2C_ADDRESS,
+            Register::ChargeOption0,
+            &[0x0E, 0xE7], // Default LSB 0x0E, Default MSB 0xE7
+        ),
+        // Write the modified ChargeOption0 (LSB first) to enable IIN_DPM
         write_registers_transaction(
             BQ25730_I2C_ADDRESS,
             Register::ChargeOption0,
-            &[0x0E, 0xE7], // LSB, MSB (Default LSB 0x0E, Default MSB 0xE7)
+            &[0x0E | 0x02, 0xE7], // LSB with EN_IIN_DPM (bit 1) set
         ),
-        // Set IIN_HOST: 3100mA (raw = 31)
-        write_register_transaction(BQ25730_I2C_ADDRESS, Register::IinHost, 31), // 3200mA (raw = 31, default)
+        // Set IIN_HOST: 3200mA (raw = 31)
+        write_register_transaction(BQ25730_I2C_ADDRESS, Register::IinHost, 31),
         // Set VSYS_MIN: 3500mV (raw = 35)
         write_register_transaction(BQ25730_I2C_ADDRESS, Register::VsysMin, 35),
-        // Clear ChargerStatus flags (read current value, then write 0s to clear R/W bits)
+        // Read current ChargerStatus LSB (0x20)
         read_register_transaction(BQ25730_I2C_ADDRESS, Register::ChargerStatus, 0xFF), // Assume initial state is all flags set
+        // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3) by writing 0
         write_register_transaction(
             BQ25730_I2C_ADDRESS,
             Register::ChargerStatus,
-            0xE7, // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3) by writing 0
+            0xFF & !(0x10 | 0x08), // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3)
         ),
     ];
 
@@ -93,8 +99,7 @@ fn test_write_registers() -> Result<(), Error<ErrorKind>> {
         &[0x01, 0x02],
     )];
     let mut charger = new_bq25730_with_mock(&expectations);
-    charger
-        .write_registers(Register::ChargeOption0, &[0x01, 0x02])?;
+    charger.write_registers(Register::ChargeOption0, &[0x01, 0x02])?;
     charger.i2c.done();
     Ok(())
 }

@@ -161,28 +161,21 @@ pub struct OtgVoltage(pub u16);
 
 impl OtgVoltage {
     /// LSB value for OTG Voltage in mV.
-    pub const LSB_MV: u16 = 8;
+    pub const LSB_MV: u16 = 2; // 2mV/LSB based on empirical data from datasheet 7.5
 
     /// Creates a new OtgVoltage from raw LSB and MSB register values.
-    /// The 11-bit value (D10-D0) is formed by:
-    /// MSB (0x07): D10-D8 in bits 2:0
-    /// LSB (0x06): D7-D0 in bits 7:0
+    /// OTGVoltage is a 16-bit value (MSB at 0x07, LSB at 0x06)
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
-        // OTGVoltage is a 12-bit value (D11-D0)
-        // MSB (0x07): D11-D5 in bits 6:0
-        // LSB (0x06): D4-D0 in bits 4:0
-        let raw_value = (((msb & 0x7F) as u16) << 5) | (((lsb >> 3) & 0x1F) as u16);
-        OtgVoltage((raw_value * Self::LSB_MV) + 3000)
+        let raw_value = ((msb as u16) << 8) | (lsb as u16);
+        OtgVoltage(raw_value * Self::LSB_MV) // No offset based on empirical data
     }
 
     /// Converts the OtgVoltage to raw MSB and LSB register values.
-    /// The 12-bit value (D11-D0) is formed by:
-    /// MSB (0x07): D11-D5 in bits 6:0
-    /// LSB (0x06): D4-D0 in bits 4:0
+    /// OTGVoltage is a 16-bit value (MSB at 0x07, LSB at 0x06)
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = (self.0 - 3000) / Self::LSB_MV; // Subtract 3000mV offset (from 3.0V)
-        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
-        let lsb = ((raw_value & 0x1F) << 3) as u8; // D4-D0 in bits 7:3 of LSB (0x06)
+        let raw_value = self.0 / Self::LSB_MV; // No offset based on empirical data
+        let msb = (raw_value >> 8) as u8;
+        let lsb = (raw_value & 0xFF) as u8;
         (lsb, msb) // LSB, MSB
     }
 }
@@ -379,7 +372,7 @@ impl AdcPsys {
 
     /// Converts the AdcPsys to a raw 8-bit register value.
     pub fn to_register_value(&self) -> u8 {
-        (self.0 / Self::LSB_MW) as u8
+        (self.0 / Self::LSB_MV) as u8
     }
 }
 

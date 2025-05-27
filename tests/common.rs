@@ -7,17 +7,29 @@ pub fn new_bq25730_with_mock(
 }
 
 /// Helper function to create a mock transaction for writing a single register.
-pub fn write_register_transaction(address: u8, reg: bq25730_async_rs::registers::Register, value: u8) -> embedded_hal_mock::eh1::i2c::Transaction {
+pub fn write_register_transaction(
+    address: u8,
+    reg: bq25730_async_rs::registers::Register,
+    value: u8,
+) -> embedded_hal_mock::eh1::i2c::Transaction {
     embedded_hal_mock::eh1::i2c::Transaction::write(address, vec![reg as u8, value])
 }
 
 /// Helper function to create a mock transaction for reading a single register.
-pub fn read_register_transaction(address: u8, reg: bq25730_async_rs::registers::Register, value: u8) -> embedded_hal_mock::eh1::i2c::Transaction {
+pub fn read_register_transaction(
+    address: u8,
+    reg: bq25730_async_rs::registers::Register,
+    value: u8,
+) -> embedded_hal_mock::eh1::i2c::Transaction {
     embedded_hal_mock::eh1::i2c::Transaction::write_read(address, vec![reg as u8], vec![value])
 }
 
 /// Helper function to create a mock transaction for writing multiple registers.
-pub fn write_registers_transaction(address: u8, reg: bq25730_async_rs::registers::Register, values: &[u8]) -> embedded_hal_mock::eh1::i2c::Transaction {
+pub fn write_registers_transaction(
+    address: u8,
+    reg: bq25730_async_rs::registers::Register,
+    values: &[u8],
+) -> embedded_hal_mock::eh1::i2c::Transaction {
     let mut data = vec![reg as u8];
     data.extend_from_slice(values);
     embedded_hal_mock::eh1::i2c::Transaction::write(address, data)
@@ -29,7 +41,11 @@ pub fn read_registers_transaction(
     reg: bq25730_async_rs::registers::Register,
     read_data: &[u8],
 ) -> embedded_hal_mock::eh1::i2c::Transaction {
-    embedded_hal_mock::eh1::i2c::Transaction::write_read(address, vec![reg as u8], read_data.to_vec())
+    embedded_hal_mock::eh1::i2c::Transaction::write_read(
+        address,
+        vec![reg as u8],
+        read_data.to_vec(),
+    )
 }
 
 /// Helper function to assert that an error is an I2C error.
@@ -39,7 +55,10 @@ pub fn assert_i2c_error<T: core::fmt::Debug>(
 ) {
     match result {
         Err(bq25730_async_rs::errors::Error::I2c(e)) => assert_eq!(e, expected_kind),
-        _ => panic!("Expected I2c error with kind {:?}, got {:?}", expected_kind, result),
+        _ => panic!(
+            "Expected I2c error with kind {:?}, got {:?}",
+            expected_kind, result
+        ),
     }
 }
 

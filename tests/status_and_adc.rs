@@ -2,9 +2,9 @@
 
 include!("common.rs");
 
-use bq25730_async_rs::BQ25730_I2C_ADDRESS;
-use bq25730_async_rs::registers::Register;
 use bq25730_async_rs::errors::Error;
+use bq25730_async_rs::registers::Register;
+use bq25730_async_rs::BQ25730_I2C_ADDRESS;
 use embedded_hal::i2c::ErrorKind;
 
 #[test]
@@ -106,14 +106,46 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
 #[test]
 fn test_read_adc_measurements() -> Result<(), Error<ErrorKind>> {
     let expectations = [
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCPSYS, 0x01), // 12mV (raw = 1)
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCVBUS, 0x01), // 96mV
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCIDCHG, 0x01), // 512mA
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCICHG, 0x01), // 128mA
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCCMPIN, 0x01), // 12mV
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCIIN, 0x01), // 100mA
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCVBAT, 0x01), // 64mV
-        read_register_transaction(bq25730_async_rs::BQ25730_I2C_ADDRESS, Register::ADCVSYS, 0x01), // 64mV
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCPSYS,
+            0x01,
+        ), // 12mV (raw = 1)
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCVBUS,
+            0x01,
+        ), // 96mV
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCIDCHG,
+            0x01,
+        ), // 512mA
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCICHG,
+            0x01,
+        ), // 128mA
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCCMPIN,
+            0x01,
+        ), // 12mV
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCIIN,
+            0x01,
+        ), // 100mA
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCVBAT,
+            0x01,
+        ), // 64mV
+        read_register_transaction(
+            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+            Register::ADCVSYS,
+            0x01,
+        ), // 64mV
     ];
     let mut charger = new_bq25730_with_mock(&expectations);
     let measurements = charger.read_adc_measurements()?;

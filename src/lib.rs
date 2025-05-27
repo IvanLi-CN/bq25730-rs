@@ -164,11 +164,12 @@ where
         // Set default ChargeOption0 (e.g., enable IIN_DPM, disable Charge Inhibit)
         // Assuming default values for other bits for now.
         // Read current ChargeOption0 values to preserve other settings
-        let (mut charge_option0_lsb, mut charge_option0_msb) = self.read_charge_option0().await?;
+        let (mut charge_option0_lsb, charge_option0_msb) = self.read_charge_option0().await?;
         // Set EN_IIN_DPM bit (bit 1 of LSB)
         charge_option0_lsb |= registers::CHARGE_OPTION0_EN_IIN_DPM;
         // Write the modified ChargeOption0 (LSB first)
-        self.set_charge_option0(charge_option0_lsb, charge_option0_msb).await?;
+        self.set_charge_option0(charge_option0_lsb, charge_option0_msb)
+            .await?;
 
         // Set default Input Current Limit (e.g., 3.2A, which is 3200mA)
         // IIN_HOST LSB is 100mA, offset is 100mA. 3200mA = (raw * 100) + 100 => raw = 31
@@ -189,8 +190,8 @@ where
         // Read current ChargerStatus LSB (0x20)
         let mut current_charger_status_lsb = self.read_register(Register::ChargerStatus).await?;
         // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3) by setting them to 0
-        current_charger_status_lsb &= !(registers::CHARGER_STATUS_FAULT_SYSOVP
-            | registers::CHARGER_STATUS_FAULT_VSYS_UVP);
+        current_charger_status_lsb &=
+            !(registers::CHARGER_STATUS_FAULT_SYSOVP | registers::CHARGER_STATUS_FAULT_VSYS_UVP);
         self.write_register(Register::ChargerStatus, current_charger_status_lsb)
             .await?;
 
@@ -273,9 +274,9 @@ where
         let vbat = self.read_register(Register::ADCVBAT).await?;
         let vsys = self.read_register(Register::ADCVSYS).await?;
 
-        Ok(AdcMeasurements::from_register_values(
-            &[psys, vbus, idchg, ichg, cmpin, iin, vbat, vsys],
-        ))
+        Ok(AdcMeasurements::from_register_values(&[
+            psys, vbus, idchg, ichg, cmpin, iin, vbat, vsys,
+        ]))
     }
 
     /// Reads the Charge Current register and returns the value in mA.
@@ -467,7 +468,7 @@ where
         self.write_registers(Register::ChargeOption4, &[lsb, msb])
             .await
     }
- 
+
     /// Reads the ChargeOption4 register.
     pub async fn read_charge_option4(&mut self) -> Result<(u8, u8), Error<E>> {
         // ChargeOption4 is a 16-bit register (3D/3Ch). Read from LSB address (0x3C).
@@ -540,8 +541,11 @@ where
         // Set EN_SHIP_DCHG bit (bit 1) in ChargeOption1 LSB
         charge_option1_lsb |= registers::CHARGE_OPTION1_EN_SHIP_DCHG;
 
-        self.write_registers(Register::ChargeOption1, &[charge_option1_lsb, charge_option1_msb])
-            .await
+        self.write_registers(
+            Register::ChargeOption1,
+            &[charge_option1_lsb, charge_option1_msb],
+        )
+        .await
     }
 }
 

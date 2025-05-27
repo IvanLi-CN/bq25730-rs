@@ -10,10 +10,10 @@ fn test_set_otg_voltage() -> Result<(), Error<ErrorKind>> {
     let expectations = [write_registers_transaction(
         BQ25730_I2C_ADDRESS,
         Register::OTGVoltage,
-        &[0x1F, 0x0B], // 3000mV (raw = 375) - LSB, MSB
+        &[0xC4, 0x09], // 5000mV (raw = 2500) - LSB, MSB
     )];
     let mut charger = new_bq25730_with_mock(&expectations);
-    charger.set_otg_voltage(OtgVoltage(3000))?;
+    charger.set_otg_voltage(OtgVoltage(5000))?;
     charger.i2c.done();
 
     Ok(())
@@ -24,11 +24,11 @@ fn test_read_otg_voltage() -> Result<(), Error<ErrorKind>> {
     let expectations = [read_registers_transaction(
         BQ25730_I2C_ADDRESS,
         Register::OTGVoltage,
-        &[0x1F, 0x0B], // 3000mV (raw = 375)
+        &[0xC4, 0x09], // 5000mV (raw = 2500)
     )];
     let mut charger = new_bq25730_with_mock(&expectations);
     let voltage = charger.read_otg_voltage()?;
-    assert_eq!(voltage.0, 3000);
+    assert_eq!(voltage.0, 5000);
     charger.i2c.done();
 
     Ok(())
