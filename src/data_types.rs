@@ -368,6 +368,11 @@ impl AdcPsys {
     pub fn from_register_value(value: u8) -> Self {
         AdcPsys((value as u16) * Self::LSB_MW)
     }
+
+    /// Converts the AdcPsys to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MW) as u8
+    }
 }
 
 /// Represents the ADC VBUS measurement in mV.
@@ -382,6 +387,11 @@ impl AdcVbus {
     /// Creates a new AdcVbus from a raw 8-bit register value (0x27).
     pub fn from_register_value(value: u8) -> Self {
         AdcVbus((value as u16) * Self::LSB_MV)
+    }
+
+    /// Converts the AdcVbus to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MV) as u8
     }
 }
 
@@ -398,6 +408,11 @@ impl AdcIdchg {
     pub fn from_register_value(value: u8) -> Self {
         AdcIdchg((value as u16) * Self::LSB_MA)
     }
+
+    /// Converts the AdcIdchg to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MA) as u8
+    }
 }
 
 /// Represents the ADC ICHG measurement in mA.
@@ -412,6 +427,11 @@ impl AdcIchg {
     /// Creates a new AdcIchg from a raw 8-bit register value (0x29).
     pub fn from_register_value(value: u8) -> Self {
         AdcIchg((value as u16) * Self::LSB_MA)
+    }
+
+    /// Converts the AdcIchg to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MA) as u8
     }
 }
 
@@ -428,6 +448,11 @@ impl AdcCmpin {
     pub fn from_register_value(value: u8) -> Self {
         AdcCmpin((value as u16) * Self::LSB_MV)
     }
+
+    /// Converts the AdcCmpin to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MV) as u8
+    }
 }
 
 /// Represents the ADC IIN measurement in mA.
@@ -442,6 +467,11 @@ impl AdcIin {
     /// Creates a new AdcIin from a raw 8-bit register value (0x2B).
     pub fn from_register_value(value: u8) -> Self {
         AdcIin((value as u16) * Self::LSB_MA)
+    }
+
+    /// Converts the AdcIin to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MA) as u8
     }
 }
 
@@ -458,6 +488,11 @@ impl AdcVbat {
     pub fn from_register_value(value: u8) -> Self {
         AdcVbat((value as u16) * Self::LSB_MV)
     }
+
+    /// Converts the AdcVbat to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MV) as u8
+    }
 }
 
 /// Represents the ADC VSYS measurement in mV.
@@ -472,6 +507,11 @@ impl AdcVsys {
     /// Creates a new AdcVsys from a raw 8-bit register value (0x2D).
     pub fn from_register_value(value: u8) -> Self {
         AdcVsys((value as u16) * Self::LSB_MV)
+    }
+
+    /// Converts the AdcVsys to a raw 8-bit register value.
+    pub fn to_register_value(&self) -> u8 {
+        (self.0 / Self::LSB_MV) as u8
     }
 }
 
