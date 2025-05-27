@@ -1,3 +1,5 @@
+#![allow(clippy::approx_constant)]
+
 #[cfg(feature = "defmt")]
 use defmt::Format;
 
@@ -87,12 +89,15 @@ impl ChargeCurrent {
     /// Creates a new ChargeCurrent from a raw 13-bit register value.
     /// The value is stored across two bytes (MSB at 0x03, LSB at 0x02).
     /// The 13-bit value is formed by `((msb & 0x1F) << 8) | lsb`.
-    /// Creates a new ChargeCurrent from raw MSB and LSB register values.
+    /// Creates a new ChargeCurrent from raw LSB and MSB register values.
     /// The 13-bit value (D12-D0) is formed by:
     /// MSB (0x03): D12-D8 in bits 4:0
-    /// LSB (0x02): D4-D0 in bits 7:3
-    pub fn from_register_value(msb: u8, lsb: u8) -> Self {
-        let raw_value = (((msb & 0x1F) as u16) << 8) | (lsb as u16);
+    /// LSB (0x02): D7-D0 in bits 7:0
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        // ChargeCurrent is a 13-bit value (D12-D0)
+        // MSB (0x03): D6-D2 in bits 4:0
+        // LSB (0x02): D1-D0 in bits 7:6
+        let raw_value = (((msb & 0x1F) as u16) << 2) | (((lsb >> 6) & 0x03) as u16);
         ChargeCurrent(raw_value * Self::LSB_MA)
     }
 
@@ -100,11 +105,15 @@ impl ChargeCurrent {
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.0 / Self::LSB_MA;
         // ChargeCurrent is a 13-bit value (D12-D0)
-        // MSB (0x03): D12-D8 in bits 4:0
-        // LSB (0x02): D7-D0 in bits 7:0
-        let msb = ((raw_value >> 8) & 0x1F) as u8; // D12-D8 in bits 4:0 of MSB (0x03)
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x02)
-        (msb, lsb)
+        // MSB (0x03): D6-D2 in bits 4:0
+        // LSB (0x02): D1-D0 in bits 7:6
+        let lsb = ((raw_value & 0x01) << 6) as u8 | (((raw_value >> 1) & 0x01) << 7) as u8;
+        let msb = ((raw_value >> 2) & 0x1F) as u8;
+        (lsb, msb)
+    }
+    /// Converts the ChargeCurrent to milliamps.
+    pub fn to_milliamps(&self) -> u16 {
+        self.0
     }
 }
 
@@ -115,31 +124,33 @@ pub struct ChargeVoltage(pub u16);
 
 impl ChargeVoltage {
     /// LSB value for Charge Voltage in mV.
-    pub const LSB_MV: u16 = 8;
+    pub const LSB_MV: u16 = 8; // 8mV/LSB
 
-    /// Creates a new ChargeVoltage from a raw 12-bit register value.
-    /// The value is stored across two bytes (MSB at 0x05, LSB at 0x04).
-    /// The 12-bit value is formed by `((msb & 0x0F) << 8) | lsb`.
-    pub fn from_register_value(msb: u8, lsb: u8) -> Self {
+    /// Creates a new ChargeVoltage from raw LSB and MSB register values.
+    /// The 11-bit value (D10-D0) is formed by:
+    /// MSB (0x05): D10-D8 in bits 2:0
+    /// LSB (0x04): D7-D0 in bits 7:0
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         // ChargeVoltage is a 12-bit value (D11-D0)
-        // MSB (0x05) contains D11-D4
-        // LSB (0x04) contains D3-D0
-        // ChargeVoltage is a 12-bit value (D11-D0)
-        // MSB (0x05) contains D11-D4
-        // LSB (0x04) contains D3-D0
-        let raw_value = ((msb as u16) << 4) | ((lsb >> 4) as u16); // D11-D0
-        ChargeVoltage(1024 + raw_value * Self::LSB_MV) // Add 1024mV offset (from 1.024V)
+        // MSB (0x05): D11-D5 in bits 6:0
+        // LSB (0x04): D4-D0 in bits 4:0
+        let raw_value = (((msb & 0x7F) as u16) << 5) | ((lsb & 0x1F) as u16);
+        ChargeVoltage(raw_value * Self::LSB_MV)
     }
 
     /// Converts the ChargeVoltage to raw MSB and LSB register values.
     /// The 12-bit value (D11-D0) is formed by:
-    /// MSB (0x05): D11-D4 in bits 7:0
-    /// LSB (0x04): D3-D0 in bits 7:4
+    /// MSB (0x05): D11-D5 in bits 6:0
+    /// LSB (0x04): D4-D0 in bits 4:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = (self.0 - 1024) / Self::LSB_MV; // Subtract 1024mV offset
-        let msb = (raw_value >> 4) as u8; // D11-D4 in bits 7:4 of MSB (0x05)
-        let lsb = ((raw_value & 0x0F) << 4) as u8; // D3-D0 in bits 3:0 of LSB (0x04)
-        (msb, lsb)
+        let raw_value = self.0 / Self::LSB_MV;
+        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
+        let lsb = (raw_value & 0x1F) as u8; // D4-D0
+        (lsb, msb) // LSB, MSB
+    }
+    /// Converts the ChargeVoltage to millivolts.
+    pub fn to_millivolts(&self) -> u16 {
+        self.0
     }
 }
 
@@ -152,31 +163,27 @@ impl OtgVoltage {
     /// LSB value for OTG Voltage in mV.
     pub const LSB_MV: u16 = 8;
 
-    /// Creates a new OtgVoltage from a raw 11-bit register value.
-    /// The value is stored across two bytes (MSB at 0x07, LSB at 0x06).
-    /// The 11-bit value is formed by `((msb & 0x07) << 8) | lsb`.
-    /// Creates a new OtgVoltage from raw MSB and LSB register values.
+    /// Creates a new OtgVoltage from raw LSB and MSB register values.
     /// The 11-bit value (D10-D0) is formed by:
     /// MSB (0x07): D10-D8 in bits 2:0
     /// LSB (0x06): D7-D0 in bits 7:0
-    pub fn from_register_value(msb: u8, lsb: u8) -> Self {
-        let raw_value = (((msb & 0x07) as u16) << 8) | (lsb as u16); // D10-D0
-        OtgVoltage(raw_value * Self::LSB_MV + 3000) // Add 3000mV offset (from 3.0V)
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        // OTGVoltage is a 12-bit value (D11-D0)
+        // MSB (0x07): D11-D5 in bits 6:0
+        // LSB (0x06): D4-D0 in bits 4:0
+        let raw_value = (((msb & 0x7F) as u16) << 5) | (((lsb >> 3) & 0x1F) as u16);
+        OtgVoltage((raw_value * Self::LSB_MV) + 3000)
     }
 
     /// Converts the OtgVoltage to raw MSB and LSB register values.
-    /// The 11-bit value (D10-D0) is formed by:
-    /// MSB (0x07): D10-D3 in bits 7:0
-    /// LSB (0x06): D2-D0 in bits 7:5
-    /// Converts the OtgVoltage to raw MSB and LSB register values.
-    /// The 11-bit value (D10-D0) is formed by:
-    /// MSB (0x07): D10-D8 in bits 2:0
-    /// LSB (0x06): D7-D0 in bits 7:0
+    /// The 12-bit value (D11-D0) is formed by:
+    /// MSB (0x07): D11-D5 in bits 6:0
+    /// LSB (0x06): D4-D0 in bits 4:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = (self.0 - 3000) / Self::LSB_MV; // Subtract 3000mV offset
-        let msb = ((raw_value >> 8) & 0x07) as u8; // D10-D8 in bits 2:0 of MSB (0x07)
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x06)
-        (msb, lsb)
+        let raw_value = (self.0 - 3000) / Self::LSB_MV; // Subtract 3000mV offset (from 3.0V)
+        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
+        let lsb = ((raw_value & 0x1F) << 3) as u8; // D4-D0 in bits 7:3 of LSB (0x06)
+        (lsb, msb) // LSB, MSB
     }
 }
 
@@ -193,34 +200,29 @@ impl OtgCurrent {
     /// The 10-bit value (D9-D0) is formed by:
     /// MSB (0x09): D9-D8 in bits 1:0
     /// LSB (0x08): D7-D0 in bits 7:0
-    pub fn from_register_value(msb: u8, lsb: u8) -> Self {
+    pub fn from_register_value(_lsb: u8, msb: u8) -> Self {
         // D9 is in bit 1 of MSB (0x09), D8 is in bit 0 of MSB (0x09)
-        let raw_value = (((msb & 0x03) as u16) << 8) | (lsb as u16); // D9-D0
+        let raw_value = (msb & 0x7F) as u16; // D6-D0
         OtgCurrent(raw_value * Self::LSB_MA)
     }
 
-    /// Converts the OtgCurrent to raw MSB and LSB register values.
-    /// The 10-bit value (D9-D0) is formed by:
-    /// MSB (0x09): D9-D2 in bits 7:0
-    /// LSB (0x08): D1-D0 in bits 7:6
     /// Converts the OtgCurrent to raw MSB and LSB register values.
     /// The 10-bit value (D9-D0) is formed by:
     /// MSB (0x09): D9-D8 in bits 1:0
     /// LSB (0x08): D7-D0 in bits 7:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.0 / Self::LSB_MA;
-        // OTGCurrent is a 10-bit value (D9-D0)
-        // MSB (0x09): D9-D8 in bits 1:0
-        // LSB (0x08): D7-D0 in bits 7:0
-        let msb = ((raw_value >> 8) & 0x03) as u8; // D9-D8 in bits 1:0 of MSB (0x09)
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x08)
-        (msb, lsb)
+        // OTGCurrent is a 7-bit value (D6-D0)
+        // MSB (0x09): D6-D0 in bits 6:0
+        // LSB (0x08): Reserved
+        let msb = (raw_value & 0x7F) as u8; // D6-D0 in bits 6:0 of MSB (0x09)
+        let lsb = 0x00; // LSB (0x08) is reserved, write 0
+        (lsb, msb)
     }
-    /// Converts the OtgCurrent to a raw 8-bit register value.
+    /// Converts the OtgCurrent to a raw 8-bit register value (MSB part).
     pub fn to_register_value(&self) -> u8 {
-        // This function is likely not used for OtgCurrent as it's a 2-byte register.
         let raw_value = self.0 / Self::LSB_MA;
-        (raw_value & 0xFF) as u8 // Return LSB part
+        (raw_value & 0x7F) as u8 // Return MSB part (D6-D0)
     }
 }
 
@@ -238,9 +240,9 @@ impl InputVoltage {
     /// Creates a new InputVoltage from a raw 9-bit register value.
     /// The value is stored across two bytes (MSB at 0x0B, LSB at 0x0A).
     /// The 9-bit value is formed by `((msb & 0x01) << 8) | lsb`.
-    pub fn from_register_value(msb: u8, lsb: u8) -> Self {
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         // D8 is in bit 7 of MSB (0x0B)
-        let raw_value = (((msb & 0x01) as u16) << 8) | (lsb as u16); // D8-D0 (D8 is bit 7 of MSB)
+        let raw_value = (((msb >> 5) & 0x01) as u16) << 8 | (lsb as u16); // D8-D0 (D8 is bit 5 of MSB)
         InputVoltage(raw_value * Self::LSB_MV + Self::OFFSET_MV)
     }
 
@@ -250,9 +252,9 @@ impl InputVoltage {
     /// LSB (0x0A): D7-D0 in bits 7:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = (self.0 - Self::OFFSET_MV) / Self::LSB_MV;
-        let msb = ((raw_value >> 8) & 0x01) as u8; // D8 in bit 7 of MSB (0x0B)
+        let msb = (((raw_value >> 8) & 0x01) << 5) as u8; // D8 in bit 5 of MSB (0x0B)
         let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x0A)
-        (msb << 7, lsb) // Shift D8 to bit 7 of MSB byte (0x0B)
+        (lsb, msb) // LSB, MSB
     }
     /// Converts the InputVoltage to a raw 8-bit register value.
     /// This function is likely not used for InputVoltage as it's a 2-byte register.
@@ -273,13 +275,19 @@ impl VsysMin {
     pub const LSB_MV: u16 = 100;
 
     /// Creates a new VsysMin from a raw 8-bit register value (LSB at 0x0C).
-    pub fn from_register_value(lsb: u8) -> Self {
-        VsysMin((lsb as u16) * Self::LSB_MV)
+    pub fn from_register_value(msb: u8) -> Self {
+        VsysMin((msb as u16) * Self::LSB_MV)
     }
 
     /// Converts the VsysMin to a raw 8-bit register value.
     pub fn to_register_value(&self) -> u8 {
         (self.0 / Self::LSB_MV) as u8
+    }
+
+    /// Converts the VsysMin to raw MSB and LSB register values.
+    /// Since VsysMin is an 8-bit register, LSB will be 0.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        (0x00, self.to_register_value())
     }
 }
 
@@ -295,8 +303,8 @@ impl IinHost {
     pub const OFFSET_MA: u16 = 100; // 100mA offset at code 0
 
     /// Creates a new IinHost from a raw 8-bit register value (LSB at 0x0E).
-    pub fn from_register_value(lsb: u8) -> Self {
-        IinHost((lsb as u16) * Self::LSB_MA + Self::OFFSET_MA)
+    pub fn from_register_value(msb: u8) -> Self {
+        IinHost(((msb & 0x7F) as u16) * Self::LSB_MA + Self::OFFSET_MA)
     }
 
     /// Converts the IinHost to a raw 8-bit register value.
@@ -315,7 +323,7 @@ impl IinHost {
     /// Converts the IinHost to raw MSB and LSB register values.
     /// Since IinHost is an 8-bit register, MSB will be 0.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0, self.to_register_value())
+        (0x00, self.to_register_value())
     }
 }
 
@@ -331,8 +339,8 @@ impl IinDpm {
     pub const OFFSET_MA: u16 = 100; // 100mA offset at code 0
 
     /// Creates a new IinDpm from a raw 8-bit register value (LSB at 0x24).
-    pub fn from_register_value(lsb: u8) -> Self {
-        IinDpm((lsb as u16) * Self::LSB_MA + Self::OFFSET_MA)
+    pub fn from_register_value(msb: u8) -> Self {
+        IinDpm(((msb & 0x7F) as u16) * Self::LSB_MA + Self::OFFSET_MA)
     }
 
     /// Converts the IinDpm to a raw 8-bit register value.
@@ -351,7 +359,7 @@ impl IinDpm {
     /// Converts the IinDpm to raw MSB and LSB register values.
     /// Since IinDpm is an 8-bit register, MSB will be 0.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0, self.to_register_value())
+        (0x00, self.to_register_value())
     }
 }
 
@@ -361,12 +369,12 @@ impl IinDpm {
 pub struct AdcPsys(pub u16);
 
 impl AdcPsys {
-    /// LSB value for ADC PSYS in mW (assuming 256mW/LSB, PSYS_RATIO=0).
-    pub const LSB_MW: u16 = 1200; // 1200mW/LSB (1.2W/LSB) for PSYS (assuming 1uA/W gain and 10kohm resistor)
+    /// LSB value for ADC PSYS in mV.
+    pub const LSB_MV: u16 = 12; // 12mV/LSB for ADC_FULLSCALE=1b
 
     /// Creates a new AdcPsys from a raw 8-bit register value (0x26).
     pub fn from_register_value(value: u8) -> Self {
-        AdcPsys((value as u16) * Self::LSB_MW)
+        AdcPsys((value as u16) * Self::LSB_MV)
     }
 
     /// Converts the AdcPsys to a raw 8-bit register value.
@@ -542,5 +550,413 @@ impl AdcMeasurements {
             vbat: AdcVbat::from_register_value(values[6]),
             vsys: AdcVsys::from_register_value(values[7]),
         }
+    }
+}
+
+/// Represents the ChargeOption0 register settings.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+pub struct ChargeOption0 {
+    pub en_cmp_latch: bool,
+    pub en_ichg_term: bool,
+    pub en_term_stat: bool,
+    pub en_chrg_inhibit: bool,
+    pub en_aicl_ichg: bool,
+    pub en_aicl_vbus: bool,
+    pub en_aicl_vsys: bool,
+    pub en_aicl_cmpoff: bool,
+    pub en_low_power: bool,
+    pub en_otg_comp: bool,
+    pub en_otg_ichg: bool,
+    pub en_otg_vsys: bool,
+    pub en_otg_vbat: bool,
+    pub en_otg_iin: bool,
+    pub en_otg_cmpin: bool,
+    pub en_otg_vbus: bool,
+}
+
+impl ChargeOption0 {
+    /// Creates a new ChargeOption0 from raw LSB and MSB register values.
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        Self {
+            en_cmp_latch: (lsb & 0x01) != 0,
+            en_ichg_term: (lsb & 0x02) != 0,
+            en_term_stat: (lsb & 0x04) != 0,
+            en_chrg_inhibit: (lsb & 0x08) != 0,
+            en_aicl_ichg: (lsb & 0x10) != 0,
+            en_aicl_vbus: (lsb & 0x20) != 0,
+            en_aicl_vsys: (lsb & 0x40) != 0,
+            en_aicl_cmpoff: (lsb & 0x80) != 0,
+            en_low_power: (msb & 0x01) != 0,
+            en_otg_comp: (msb & 0x02) != 0,
+            en_otg_ichg: (msb & 0x04) != 0,
+            en_otg_vsys: (msb & 0x08) != 0,
+            en_otg_vbat: (msb & 0x10) != 0,
+            en_otg_iin: (msb & 0x20) != 0,
+            en_otg_cmpin: (msb & 0x40) != 0,
+            en_otg_vbus: (msb & 0x80) != 0,
+        }
+    }
+
+    /// Converts the ChargeOption0 to raw MSB and LSB register values.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let mut lsb: u8 = 0;
+        let mut msb: u8 = 0;
+
+        if self.en_cmp_latch {
+            lsb |= 0x01;
+        }
+        if self.en_ichg_term {
+            lsb |= 0x02;
+        }
+        if self.en_term_stat {
+            lsb |= 0x04;
+        }
+        if self.en_chrg_inhibit {
+            lsb |= 0x08;
+        }
+        if self.en_aicl_ichg {
+            lsb |= 0x10;
+        }
+        if self.en_aicl_vbus {
+            lsb |= 0x20;
+        }
+        if self.en_aicl_vsys {
+            lsb |= 0x40;
+        }
+        if self.en_aicl_cmpoff {
+            lsb |= 0x80;
+        }
+        if self.en_low_power {
+            msb |= 0x01;
+        }
+        if self.en_otg_comp {
+            msb |= 0x02;
+        }
+        if self.en_otg_ichg {
+            msb |= 0x04;
+        }
+        if self.en_otg_vsys {
+            msb |= 0x08;
+        }
+        if self.en_otg_vbat {
+            msb |= 0x10;
+        }
+        if self.en_otg_iin {
+            msb |= 0x20;
+        }
+        if self.en_otg_cmpin {
+            msb |= 0x40;
+        }
+        if self.en_otg_vbus {
+            msb |= 0x80;
+        }
+        (lsb, msb)
+    }
+}
+
+/// Represents the ChargeOption1 register settings.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+pub struct ChargeOption1 {
+    pub en_ship_dchg: bool,
+    pub en_hiz: bool,
+    pub en_chrg_pump: bool,
+    pub en_otg_pmp: bool,
+    pub en_otg_vsys_uvp: bool,
+    pub en_otg_vsys_ovp: bool,
+    pub en_otg_vbat_uvp: bool,
+    pub en_otg_vbat_ovp: bool,
+    pub en_otg_iin_ocp: bool,
+    pub en_otg_ichg_ocp: bool,
+    pub en_otg_cmpin_ocp: bool,
+    pub en_otg_vbus_ocp: bool,
+    pub en_otg_vsys_ocp: bool,
+    pub en_otg_vbat_ocp: bool,
+    pub en_otg_iin_ucp: bool,
+    pub en_otg_ichg_ucp: bool,
+}
+
+impl ChargeOption1 {
+    /// Creates a new ChargeOption1 from raw LSB and MSB register values.
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        Self {
+            en_ship_dchg: (lsb & 0x01) != 0,
+            en_hiz: (lsb & 0x02) != 0,
+            en_chrg_pump: (lsb & 0x04) != 0,
+            en_otg_pmp: (lsb & 0x08) != 0,
+            en_otg_vsys_uvp: (lsb & 0x10) != 0,
+            en_otg_vsys_ovp: (lsb & 0x20) != 0,
+            en_otg_vbat_uvp: (lsb & 0x40) != 0,
+            en_otg_vbat_ovp: (lsb & 0x80) != 0,
+            en_otg_iin_ocp: (msb & 0x01) != 0,
+            en_otg_ichg_ocp: (msb & 0x02) != 0,
+            en_otg_cmpin_ocp: (msb & 0x04) != 0,
+            en_otg_vbus_ocp: (msb & 0x08) != 0,
+            en_otg_vsys_ocp: (msb & 0x10) != 0,
+            en_otg_vbat_ocp: (msb & 0x20) != 0,
+            en_otg_iin_ucp: (msb & 0x40) != 0,
+            en_otg_ichg_ucp: (msb & 0x80) != 0,
+        }
+    }
+
+    /// Converts the ChargeOption1 to raw MSB and LSB register values.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let mut lsb: u8 = 0;
+        let mut msb: u8 = 0;
+
+        if self.en_ship_dchg {
+            lsb |= 0x01;
+        }
+        if self.en_hiz {
+            lsb |= 0x02;
+        }
+        if self.en_chrg_pump {
+            lsb |= 0x04;
+        }
+        if self.en_otg_pmp {
+            lsb |= 0x08;
+        }
+        if self.en_otg_vsys_uvp {
+            lsb |= 0x10;
+        }
+        if self.en_otg_vsys_ovp {
+            lsb |= 0x20;
+        }
+        if self.en_otg_vbat_uvp {
+            lsb |= 0x40;
+        }
+        if self.en_otg_vbat_ovp {
+            lsb |= 0x80;
+        }
+        if self.en_otg_iin_ocp {
+            msb |= 0x01;
+        }
+        if self.en_otg_ichg_ocp {
+            msb |= 0x02;
+        }
+        if self.en_otg_cmpin_ocp {
+            msb |= 0x04;
+        }
+        if self.en_otg_vbus_ocp {
+            msb |= 0x08;
+        }
+        if self.en_otg_vsys_ocp {
+            msb |= 0x10;
+        }
+        if self.en_otg_vbat_ocp {
+            msb |= 0x20;
+        }
+        if self.en_otg_iin_ucp {
+            msb |= 0x40;
+        }
+        if self.en_otg_ichg_ucp {
+            msb |= 0x80;
+        }
+        (lsb, msb)
+    }
+}
+
+/// Represents the ChargeOption2 register settings.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+pub struct ChargeOption2 {
+    pub en_learn: bool,
+    pub en_otg_uvlo: bool,
+    pub en_otg_ovlo: bool,
+    pub en_otg_ocp: bool,
+    pub en_otg_ucp: bool,
+    pub en_otg_vsys_uvp: bool,
+    pub en_otg_vsys_ovp: bool,
+    pub en_otg_vbat_uvp: bool,
+    pub en_otg_vbat_ovp: bool,
+    pub en_otg_iin_ocp: bool,
+    pub en_otg_ichg_ocp: bool,
+    pub en_otg_cmpin_ocp: bool,
+    pub en_otg_vbus_ocp: bool,
+    pub en_otg_vsys_ocp: bool,
+    pub en_otg_vbat_ocp: bool,
+    pub en_otg_iin_ucp: bool,
+}
+
+impl ChargeOption2 {
+    /// Creates a new ChargeOption2 from raw LSB and MSB register values.
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        Self {
+            en_learn: (lsb & 0x01) != 0,
+            en_otg_uvlo: (lsb & 0x02) != 0,
+            en_otg_ovlo: (lsb & 0x04) != 0,
+            en_otg_ocp: (lsb & 0x08) != 0,
+            en_otg_ucp: (lsb & 0x10) != 0,
+            en_otg_vsys_uvp: (lsb & 0x20) != 0,
+            en_otg_vsys_ovp: (lsb & 0x40) != 0,
+            en_otg_vbat_uvp: (lsb & 0x80) != 0,
+            en_otg_vbat_ovp: (msb & 0x01) != 0,
+            en_otg_iin_ocp: (msb & 0x02) != 0,
+            en_otg_ichg_ocp: (msb & 0x04) != 0,
+            en_otg_cmpin_ocp: (msb & 0x08) != 0,
+            en_otg_vbus_ocp: (msb & 0x10) != 0,
+            en_otg_vsys_ocp: (msb & 0x20) != 0,
+            en_otg_vbat_ocp: (msb & 0x40) != 0,
+            en_otg_iin_ucp: (msb & 0x80) != 0,
+        }
+    }
+
+    /// Converts the ChargeOption2 to raw MSB and LSB register values.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let mut lsb: u8 = 0;
+        let mut msb: u8 = 0;
+
+        if self.en_learn {
+            lsb |= 0x01;
+        }
+        if self.en_otg_uvlo {
+            lsb |= 0x02;
+        }
+        if self.en_otg_ovlo {
+            lsb |= 0x04;
+        }
+        if self.en_otg_ocp {
+            lsb |= 0x08;
+        }
+        if self.en_otg_ucp {
+            lsb |= 0x10;
+        }
+        if self.en_otg_vsys_uvp {
+            lsb |= 0x20;
+        }
+        if self.en_otg_vsys_ovp {
+            lsb |= 0x40;
+        }
+        if self.en_otg_vbat_uvp {
+            lsb |= 0x80;
+        }
+        if self.en_otg_vbat_ovp {
+            msb |= 0x01;
+        }
+        if self.en_otg_iin_ocp {
+            msb |= 0x02;
+        }
+        if self.en_otg_ichg_ocp {
+            msb |= 0x04;
+        }
+        if self.en_otg_cmpin_ocp {
+            msb |= 0x08;
+        }
+        if self.en_otg_vbus_ocp {
+            msb |= 0x10;
+        }
+        if self.en_otg_vsys_ocp {
+            msb |= 0x20;
+        }
+        if self.en_otg_vbat_ocp {
+            msb |= 0x40;
+        }
+        if self.en_otg_iin_ucp {
+            msb |= 0x80;
+        }
+        (lsb, msb)
+    }
+}
+
+/// Represents the ChargeOption3 register settings.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+pub struct ChargeOption3 {
+    pub en_learn: bool,
+    pub en_otg_uvlo: bool,
+    pub en_otg_ovlo: bool,
+    pub en_otg_ocp: bool,
+    pub en_otg_ucp: bool,
+    pub en_otg_vsys_uvp: bool,
+    pub en_otg_vsys_ovp: bool,
+    pub en_otg_vbat_uvp: bool,
+    pub en_otg_vbat_ovp: bool,
+    pub en_otg_iin_ocp: bool,
+    pub en_otg_ichg_ocp: bool,
+    pub en_otg_cmpin_ocp: bool,
+    pub en_otg_vbus_ocp: bool,
+    pub en_otg_vsys_ocp: bool,
+    pub en_otg_vbat_ocp: bool,
+    pub en_otg_iin_ucp: bool,
+}
+
+impl ChargeOption3 {
+    /// Creates a new ChargeOption3 from raw LSB and MSB register values.
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        Self {
+            en_learn: (lsb & 0x01) != 0,
+            en_otg_uvlo: (lsb & 0x02) != 0,
+            en_otg_ovlo: (lsb & 0x04) != 0,
+            en_otg_ocp: (lsb & 0x08) != 0,
+            en_otg_ucp: (lsb & 0x10) != 0,
+            en_otg_vsys_uvp: (lsb & 0x20) != 0,
+            en_otg_vsys_ovp: (lsb & 0x40) != 0,
+            en_otg_vbat_uvp: (lsb & 0x80) != 0,
+            en_otg_vbat_ovp: (msb & 0x01) != 0,
+            en_otg_iin_ocp: (msb & 0x02) != 0,
+            en_otg_ichg_ocp: (msb & 0x04) != 0,
+            en_otg_cmpin_ocp: (msb & 0x08) != 0,
+            en_otg_vbus_ocp: (msb & 0x10) != 0,
+            en_otg_vsys_ocp: (msb & 0x20) != 0,
+            en_otg_vbat_ocp: (msb & 0x40) != 0,
+            en_otg_iin_ucp: (msb & 0x80) != 0,
+        }
+    }
+
+    /// Converts the ChargeOption3 to raw MSB and LSB register values.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let mut lsb: u8 = 0;
+        let mut msb: u8 = 0;
+
+        if self.en_learn {
+            lsb |= 0x01;
+        }
+        if self.en_otg_uvlo {
+            lsb |= 0x02;
+        }
+        if self.en_otg_ovlo {
+            lsb |= 0x04;
+        }
+        if self.en_otg_ocp {
+            lsb |= 0x08;
+        }
+        if self.en_otg_ucp {
+            lsb |= 0x10;
+        }
+        if self.en_otg_vsys_uvp {
+            lsb |= 0x20;
+        }
+        if self.en_otg_vsys_ovp {
+            lsb |= 0x40;
+        }
+        if self.en_otg_vbat_uvp {
+            lsb |= 0x80;
+        }
+        if self.en_otg_vbat_ovp {
+            msb |= 0x01;
+        }
+        if self.en_otg_iin_ocp {
+            msb |= 0x02;
+        }
+        if self.en_otg_ichg_ocp {
+            msb |= 0x04;
+        }
+        if self.en_otg_cmpin_ocp {
+            msb |= 0x08;
+        }
+        if self.en_otg_vbus_ocp {
+            msb |= 0x10;
+        }
+        if self.en_otg_vsys_ocp {
+            msb |= 0x20;
+        }
+        if self.en_otg_vbat_ocp {
+            msb |= 0x40;
+        }
+        if self.en_otg_iin_ucp {
+            msb |= 0x80;
+        }
+        (lsb, msb)
     }
 }

@@ -17,8 +17,38 @@ defmt = { version = "1.0.1", optional = true } # Add defmt dependency
 
 [dev-dependencies]
 embedded-hal-mock = "0.11"
-tokio = { version = "1.37.0", features = ["macros", "rt-multi-thread"] }
-bq25730 = { path = ".", package = "bq25730-async-rs" }
+
+[lib]
+path = "src/lib.rs"
+
+[[test]]
+name = "integration_tests"
+path = "tests/integration_test.rs"
+required-features = ["async"] # integration_test.rs uses async
+
+[[test]]
+name = "init_and_basic_tests"
+path = "tests/init_and_basic.rs"
+
+[[test]]
+name = "charge_control_tests"
+path = "tests/charge_control.rs"
+
+[[test]]
+name = "otg_control_tests"
+path = "tests/otg_control.rs"
+
+[[test]]
+name = "input_power_management_tests"
+path = "tests/input_power_management.rs"
+
+[[test]]
+name = "status_and_adc_tests"
+path = "tests/status_and_adc.rs"
+
+[[test]]
+name = "option_registers_tests"
+path = "tests/option_registers.rs"
 
 [profile.dev]
 # Rust debug is too slow.

@@ -104,22 +104,22 @@ pub enum Register {
 }
 
 // ChargeOption0 (01/00h) bit masks
-pub const CHARGE_OPTION0_EN_LWPWR: u8 = 1 << 7;
-pub const CHARGE_OPTION0_WDTMR_ADJ: u8 = 0b11 << 5;
-pub const CHARGE_OPTION0_IIN_DPM_AUTO_DISABLE: u8 = 1 << 4;
-pub const CHARGE_OPTION0_OTG_ON_CHRGOK: u8 = 1 << 3;
-pub const CHARGE_OPTION0_EN_OOA: u8 = 1 << 2;
-pub const CHARGE_OPTION0_PWM_FREQ: u8 = 1 << 1;
-pub const CHARGE_OPTION0_LOW_PTM_RIPPLE: u8 = 1 << 0;
-
-pub const CHARGE_OPTION0_EN_CMP_LATCH: u8 = 1 << 7;
-pub const CHARGE_OPTION0_VSYS_UVP_ENZ: u8 = 1 << 6;
-pub const CHARGE_OPTION0_EN_LEARN: u8 = 1 << 5;
-pub const CHARGE_OPTION0_IADPT_GAIN: u8 = 1 << 4;
-pub const CHARGE_OPTION0_IBAT_GAIN: u8 = 1 << 3;
-pub const CHARGE_OPTION0_EN_LDO: u8 = 1 << 2;
-pub const CHARGE_OPTION0_EN_IIN_DPM: u8 = 1 << 1;
-pub const CHARGE_OPTION0_CHRG_INHIBIT: u8 = 1 << 0;
+pub const CHARGE_OPTION0_MSB_EN_LWPWR: u8 = 1 << 7; // EN_LWPWR is in MSB (0x01)
+pub const CHARGE_OPTION0_MSB_WDTMR_ADJ: u8 = 0b11 << 5;
+pub const CHARGE_OPTION0_MSB_IIN_DPM_AUTO_DISABLE: u8 = 1 << 4;
+pub const CHARGE_OPTION0_MSB_OTG_ON_CHRGOK: u8 = 1 << 3;
+pub const CHARGE_OPTION0_MSB_EN_OOA: u8 = 1 << 2;
+pub const CHARGE_OPTION0_MSB_PWM_FREQ: u8 = 1 << 1;
+pub const CHARGE_OPTION0_MSB_LOW_PTM_RIPPLE: u8 = 1 << 0;
+ 
+ pub const CHARGE_OPTION0_EN_CMP_LATCH: u8 = 1 << 7; // EN_CMP_LATCH is in LSB (0x00)
+ pub const CHARGE_OPTION0_VSYS_UVP_ENZ: u8 = 1 << 6;
+ pub const CHARGE_OPTION0_EN_LEARN: u8 = 1 << 5;
+ pub const CHARGE_OPTION0_IADPT_GAIN: u8 = 1 << 4;
+ pub const CHARGE_OPTION0_IBAT_GAIN: u8 = 1 << 3;
+ pub const CHARGE_OPTION0_EN_LDO: u8 = 1 << 2;
+ pub const CHARGE_OPTION0_EN_IIN_DPM: u8 = 1 << 1;
+ pub const CHARGE_OPTION0_CHRG_INHIBIT: u8 = 1 << 0;
 
 // ChargerStatus (21/20h) bit masks
 pub const CHARGER_STATUS_STAT_AC: u8 = 1 << 7;
@@ -169,7 +169,7 @@ pub const CHARGE_OPTION1_CMP_POL: u8 = 1 << 6;
 pub const CHARGE_OPTION1_CMP_DEG: u8 = 0b11 << 4;
 pub const CHARGE_OPTION1_FORCE_CONV_OFF: u8 = 1 << 3;
 pub const CHARGE_OPTION1_EN_PTM: u8 = 1 << 2;
-pub const CHARGE_OPTION1_EN_SHIP_DCHG: u8 = 1 << 1;
+pub const CHARGE_OPTION1_EN_SHIP_DCHG: u8 = 1 << 1; // EN_SHIP_DCHG is in LSB (0x30)
 pub const CHARGE_OPTION1_AUTO_WAKEUP_EN: u8 = 1 << 0;
 
 // ChargeOption2 (33/32h) bit masks

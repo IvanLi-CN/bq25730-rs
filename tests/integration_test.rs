@@ -11,15 +11,22 @@ fn test_init() -> Result<(), Error<ErrorKind>> {
     // Expected I2C transactions during initialization
     let expectations = [
         // Set ChargeOption0: enable IIN_DPM (0x00)
+        // init function reads current value, then sets EN_IIN_DPM bit, then writes back.
+        // Assuming default ChargeOption0 is 0xE70E (LSB 0x0E, MSB 0xE7)
+        MockTransaction::write_read(
+            BQ25730_I2C_ADDRESS,
+            vec![registers::Register::ChargeOption0 as u8],
+            vec![0x0E, 0xE7], // Default LSB, MSB
+        ),
         MockTransaction::write(
             BQ25730_I2C_ADDRESS,
             vec![
                 registers::Register::ChargeOption0 as u8,
-                registers::CHARGE_OPTION0_EN_IIN_DPM,
-                0x00,
+                0x0E, // LSB (0x0E | EN_IIN_DPM which is 0x02, results in 0x0E)
+                0xE7, // MSB (default)
             ],
         ),
-        // Set IIN_HOST: 3200mA (raw = 31)
+        // Set IIN_HOST: 3100mA (raw = 31)
         MockTransaction::write(
             BQ25730_I2C_ADDRESS,
             vec![registers::Register::IinHost as u8, 31],
@@ -29,19 +36,17 @@ fn test_init() -> Result<(), Error<ErrorKind>> {
             BQ25730_I2C_ADDRESS,
             vec![registers::Register::VsysMin as u8, 35],
         ),
-        // Clear ChargerStatus flags (write 1s to clear)
+        // Clear ChargerStatus flags (read current value, then write 0s to clear R/W bits)
+        MockTransaction::write_read(
+            BQ25730_I2C_ADDRESS,
+            vec![registers::Register::ChargerStatus as u8],
+            vec![0xFF], // Assume initial state is all flags set for LSB
+        ),
         MockTransaction::write(
             BQ25730_I2C_ADDRESS,
             vec![
                 registers::Register::ChargerStatus as u8,
-                registers::CHARGER_STATUS_FAULT_ACOV
-                    | registers::CHARGER_STATUS_FAULT_BATOC
-                    | registers::CHARGER_STATUS_FAULT_ACOC
-                    | registers::CHARGER_STATUS_FAULT_SYSOVP
-                    | registers::CHARGER_STATUS_FAULT_VSYS_UVP
-                    | registers::CHARGER_STATUS_FAULT_FORCE_CONVERTER_OFF
-                    | registers::CHARGER_STATUS_FAULT_OTG_OVP
-                    | registers::CHARGER_STATUS_FAULT_OTG_UVP,
+                0xE7, // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3) by writing 0
             ],
         ),
     ];
