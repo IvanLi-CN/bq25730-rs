@@ -61,9 +61,12 @@ debug = 2
 debug-assertions = false
 incremental = false
 lto = 'fat'
-opt-level = 's'
+opt-level = 'z'
 overflow-checks = false
 
 [features]
 async = ["dep:embedded-hal-async"]
 defmt = ["dep:defmt"]
+
+[workspace]
+members = ["examples/stm32g4", "examples/stm32g0"]

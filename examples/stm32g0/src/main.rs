@@ -15,12 +15,11 @@ use {defmt_rtt as _, panic_probe as _};
 
 use bq25730_async_rs::{
     Bq25730,
-    data_types::{ChargeCurrent, ChargeVoltage, AdcMeasurements},
+    data_types::{AdcMeasurements, ChargeCurrent, ChargeVoltage},
 };
 use uom::si::{
-    electrical_resistance::{ElectricalResistance, milliohm, Dimension},
-    Quantity,
-    SI,
+    Quantity, SI,
+    electrical_resistance::{Dimension, ElectricalResistance, milliohm},
 };
 
 bind_interrupts!(struct Irqs {
@@ -63,7 +62,15 @@ async fn main(_spawner: Spawner) {
     // 0b00111111 & ~(1 << 3) | (1 << 2) = 0b00110111 (0x37)
     let charge_option1_msb: u8 = 0x37;
     let charge_option1_lsb: u8 = 0x00; // LSB 保持默认
-    if let Err(e) = bq.set_charge_option1(bq25730_async_rs::data_types::ChargeOption1::from_register_value(charge_option1_lsb, charge_option1_msb)).await {
+    if let Err(e) = bq
+        .set_charge_option1(
+            bq25730_async_rs::data_types::ChargeOption1::from_register_value(
+                charge_option1_lsb,
+                charge_option1_msb,
+            ),
+        )
+        .await
+    {
         error!("Failed to set charge option 1: {:?}", e);
     } else {
         info!("Charge option 1 set for sense resistors.");
@@ -75,7 +82,15 @@ async fn main(_spawner: Spawner) {
     // WDTMR_ADJ (bit 6:5) = 00b (禁用看门狗定时器)
     let charge_option0_msb: u8 = 0x27; // 0b00100111 (EN_LWPWR=0, WDTMR_ADJ=00, 其他保持默认)
     let charge_option0_lsb: u8 = 0x0E; // 0b00001110 (保持 IBAT_GAIN, EN_LDO, EN_IIN_DPM 默认启用)
-    if let Err(e) = bq.set_charge_option0(bq25730_async_rs::data_types::ChargeOption0::from_register_value(charge_option0_lsb, charge_option0_msb)).await {
+    if let Err(e) = bq
+        .set_charge_option0(
+            bq25730_async_rs::data_types::ChargeOption0::from_register_value(
+                charge_option0_lsb,
+                charge_option0_msb,
+            ),
+        )
+        .await
+    {
         error!("Failed to set charge option 0: {:?}", e);
     } else {
         info!("Charge option 0 set for performance mode and watchdog disabled.");
@@ -85,7 +100,10 @@ async fn main(_spawner: Spawner) {
     match bq.read_charge_option0().await {
         Ok(options) => {
             let (lsb, msb) = options.to_msb_lsb_bytes();
-            info!("Verified Charge Option 0 (raw): LSB=0x{:02X}, MSB=0x{:02X}", lsb, msb);
+            info!(
+                "Verified Charge Option 0 (raw): LSB=0x{:02X}, MSB=0x{:02X}",
+                lsb, msb
+            );
         }
         Err(e) => {
             error!("Failed to read Charge Option 0 for verification: {:?}", e);
@@ -114,11 +132,35 @@ async fn main(_spawner: Spawner) {
     }
     info!("Charging control example complete.");
 
-    // 3. 读取电池电压和电流示例 (循环读取)
+    // 3. 配置并启用 ADC 进行连续转换
+    info!("--- Configuring and Enabling ADC ---");
+    let adc_option = bq25730_async_rs::data_types::AdcOption {
+        adc_conv: true,      // 连续转换
+        adc_start: true,     // 启动转换
+        adc_fullscale: true, // 3.06V 满量程
+        en_adc_cmpin: true,  // 启用所有通道
+        en_adc_vbus: true,
+        en_adc_psys: true,
+        en_adc_iin: true,
+        en_adc_idchg: true,
+        en_adc_ichg: true,
+        en_adc_vsys: true,
+        en_adc_vbat: true,
+    };
+
+    if let Err(e) = bq.set_adc_option(adc_option).await {
+        error!("Failed to set ADC option: {:?}", e);
+    } else {
+        info!("ADC configured for continuous conversion.");
+    }
+
+    // 4. 读取电池电压和电流示例 (循环读取)
     info!("--- Reading Battery Data Example (Loop) ---");
     // 检流电阻配置：VBUS侧 10mΩ，VBAT侧 5mΩ
-    let _sense_resistor_vbus: Quantity<Dimension, SI<f32>, f32> = ElectricalResistance::new::<milliohm>(10.0);
-    let _sense_resistor_vbat: Quantity<Dimension, SI<f32>, f32> = ElectricalResistance::new::<milliohm>(5.0);
+    let _sense_resistor_vbus: Quantity<Dimension, SI<f32>, f32> =
+        ElectricalResistance::new::<milliohm>(10.0);
+    let _sense_resistor_vbat: Quantity<Dimension, SI<f32>, f32> =
+        ElectricalResistance::new::<milliohm>(5.0);
 
     loop {
         info!("--- Reading BQ25730 Data ---");
@@ -143,7 +185,10 @@ async fn main(_spawner: Spawner) {
         match bq.read_charge_option0().await {
             Ok(options) => {
                 let (lsb, msb) = options.to_msb_lsb_bytes();
-                info!("Charge Option 0 (raw): LSB=0x{:02X}, MSB=0x{:02X}", lsb, msb);
+                info!(
+                    "Charge Option 0 (raw): LSB=0x{:02X}, MSB=0x{:02X}",
+                    lsb, msb
+                );
             }
             Err(e) => {
                 error!("Failed to read Charge Option 0: {:?}", e);
@@ -171,6 +216,7 @@ async fn main(_spawner: Spawner) {
         }
 
         // 读取充电电流 (如果需要单独读取)
+        /*
         match bq.read_charge_current().await {
             Ok(current) => {
                 info!("Charge Current Register: {} mA", current.0);
@@ -179,8 +225,10 @@ async fn main(_spawner: Spawner) {
                 error!("Failed to read charge current register: {:?}", e);
             }
         }
+        */
 
         // 读取充电电压 (如果需要单独读取)
+        /*
         match bq.read_charge_voltage().await {
             Ok(voltage) => {
                 info!("Charge Voltage Register: {} mV", voltage.0);
@@ -189,6 +237,7 @@ async fn main(_spawner: Spawner) {
                 error!("Failed to read charge voltage register: {:?}", e);
             }
         }
+        */
 
         info!("----------------------------");
         Timer::after(Duration::from_secs(1)).await;

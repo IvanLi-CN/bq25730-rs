@@ -557,6 +557,71 @@ impl AdcMeasurements {
     // This function is no longer needed as AdcMeasurements is constructed directly in Bq25730::read_adc_measurements
 }
 
+/// Represents the ADCOption register (0x3B/0x3A).
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+pub struct AdcOption {
+    /// ADC conversion mode (ADC_CONV)
+    pub adc_conv: bool, // 0b: One-shot, 1b: Continuous
+    /// Start ADC conversion (ADC_START)
+    pub adc_start: bool,
+    /// ADC input voltage range adjustment for PSYS and CMPIN (ADC_FULLSCALE)
+    pub adc_fullscale: bool, // 0b: 2.04V, 1b: 3.06V
+    /// Enable ADC CMPIN channel (EN_ADC_CMPIN)
+    pub en_adc_cmpin: bool,
+    /// Enable ADC VBUS channel (EN_ADC_VBUS)
+    pub en_adc_vbus: bool,
+    /// Enable ADC PSYS channel (EN_ADC_PSYS)
+    pub en_adc_psys: bool,
+    /// Enable ADC IIN channel (EN_ADC_IIN)
+    pub en_adc_iin: bool,
+    /// Enable ADC IDCHG channel (EN_ADC_IDCHG)
+    pub en_adc_idchg: bool,
+    /// Enable ADC ICHG channel (EN_ADC_ICHG)
+    pub en_adc_ichg: bool,
+    /// Enable ADC VSYS channel (EN_ADC_VSYS)
+    pub en_adc_vsys: bool,
+    /// Enable ADC VBAT channel (EN_ADC_VBAT)
+    pub en_adc_vbat: bool,
+}
+
+impl AdcOption {
+    /// Creates a new AdcOption from raw LSB and MSB register values.
+    pub fn from_register_value(lsb: u8, msb: u8) -> Self {
+        Self {
+            adc_conv: (msb & 0x80) != 0,      // Bit 7 of MSB (0x3B)
+            adc_start: (msb & 0x40) != 0,     // Bit 6 of MSB (0x3B)
+            adc_fullscale: (msb & 0x20) != 0, // Bit 5 of MSB (0x3B)
+            en_adc_cmpin: (lsb & 0x80) != 0,  // Bit 7 of LSB (0x3A)
+            en_adc_vbus: (lsb & 0x40) != 0,   // Bit 6 of LSB (0x3A)
+            en_adc_psys: (lsb & 0x20) != 0,   // Bit 5 of LSB (0x3A)
+            en_adc_iin: (lsb & 0x10) != 0,    // Bit 4 of LSB (0x3A)
+            en_adc_idchg: (lsb & 0x08) != 0,  // Bit 3 of LSB (0x3A)
+            en_adc_ichg: (lsb & 0x04) != 0,   // Bit 2 of LSB (0x3A)
+            en_adc_vsys: (lsb & 0x02) != 0,   // Bit 1 of LSB (0x3A)
+            en_adc_vbat: (lsb & 0x01) != 0,   // Bit 0 of LSB (0x3A)
+        }
+    }
+
+    /// Converts the AdcOption to raw MSB and LSB register values.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let msb = (if self.adc_conv { 0x80 } else { 0 })
+            | (if self.adc_start { 0x40 } else { 0 })
+            | (if self.adc_fullscale { 0x20 } else { 0 });
+
+        let lsb = (if self.en_adc_cmpin { 0x80 } else { 0 })
+            | (if self.en_adc_vbus { 0x40 } else { 0 })
+            | (if self.en_adc_psys { 0x20 } else { 0 })
+            | (if self.en_adc_iin { 0x10 } else { 0 })
+            | (if self.en_adc_idchg { 0x08 } else { 0 })
+            | (if self.en_adc_ichg { 0x04 } else { 0 })
+            | (if self.en_adc_vsys { 0x02 } else { 0 })
+            | (if self.en_adc_vbat { 0x01 } else { 0 });
+
+        (lsb, msb)
+    }
+}
+
 /// Represents the ChargeOption0 register settings.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]

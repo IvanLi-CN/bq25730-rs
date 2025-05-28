@@ -318,6 +318,24 @@ where
         })
     }
 
+    /// Sets the ADCOption register.
+    pub async fn set_adc_option(&mut self, options: data_types::AdcOption) -> Result<(), Error<E>> {
+        let (lsb, msb) = options.to_msb_lsb_bytes();
+        self.write_registers(registers::Register::ADCOption, &[lsb, msb])
+            .await
+    }
+
+    /// Reads the ADCOption register.
+    pub async fn read_adc_option(&mut self) -> Result<data_types::AdcOption, Error<E>> {
+        let raw_options = self
+            .read_registers(registers::Register::ADCOption, 2)
+            .await?;
+        Ok(data_types::AdcOption::from_register_value(
+            raw_options.as_ref()[0],
+            raw_options.as_ref()[1],
+        ))
+    }
+
     /// Reads the Charge Current register and returns the value in mA.
     pub async fn read_charge_current(&mut self) -> Result<ChargeCurrent, Error<E>> {
         // ChargeCurrent is a 13-bit register (03/02h). Read from LSB address (0x02).
