@@ -1,7 +1,5 @@
 use bq25730_async_rs::registers; // Explicitly import registers module
-use bq25730_async_rs::{
-    data_types::*, errors::Error, registers::Register, Bq25730, BQ25730_I2C_ADDRESS,
-};
+use bq25730_async_rs::{errors::Error, Bq25730, BQ25730_I2C_ADDRESS};
 use embedded_hal::i2c::ErrorKind;
 use embedded_hal_mock::eh1::i2c::{Mock as MockI2c, Transaction as MockTransaction}; // Import ErrorKind
 
@@ -52,7 +50,7 @@ fn test_init() -> Result<(), Error<ErrorKind>> {
     ];
 
     let i2c = MockI2c::new(&expectations);
-    let mut charger = Bq25730::new(i2c, BQ25730_I2C_ADDRESS);
+    let mut charger = Bq25730::new(i2c, BQ25730_I2C_ADDRESS, 4); // Added cell_count for test
 
     // Call the init function
     charger.init()?;

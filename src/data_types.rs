@@ -258,7 +258,7 @@ impl InputVoltage {
     /// LSB (0x0A): D7-D0 in bits 7:0
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         // D8 is in bit 5 of MSB (0x0B)
-        let raw_value = (((msb >> 5) & 0x01) as u16) << 8 | (lsb as u16); // D8-D0 (D8 is bit 5 of MSB)
+        let raw_value = ((((msb >> 5) & 0x01) as u16) << 8) | (lsb as u16); // D8-D0 (D8 is bit 5 of MSB)
         InputVoltage(raw_value * Self::LSB_MV + Self::OFFSET_MV)
     }
 

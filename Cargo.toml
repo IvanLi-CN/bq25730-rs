@@ -21,35 +21,6 @@ embedded-hal-mock = "0.11"
 [lib]
 path = "src/lib.rs"
 
-[[test]]
-name = "integration_tests"
-path = "tests/integration_test.rs"
-required-features = ["async"] # integration_test.rs uses async
-
-[[test]]
-name = "init_and_basic_tests"
-path = "tests/init_and_basic.rs"
-
-[[test]]
-name = "charge_control_tests"
-path = "tests/charge_control.rs"
-
-[[test]]
-name = "otg_control_tests"
-path = "tests/otg_control.rs"
-
-[[test]]
-name = "input_power_management_tests"
-path = "tests/input_power_management.rs"
-
-[[test]]
-name = "status_and_adc_tests"
-path = "tests/status_and_adc.rs"
-
-[[test]]
-name = "option_registers_tests"
-path = "tests/option_registers.rs"
-
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization

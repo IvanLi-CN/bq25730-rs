@@ -1,4 +1,5 @@
 /// Helper function to create a new `Bq25730` instance with a mock I2C bus.
+/// Helper function to create a new `Bq25730` instance with a mock I2C bus.
 pub fn new_bq25730_with_mock(
     expectations: &[embedded_hal_mock::eh1::i2c::Transaction],
 ) -> bq25730_async_rs::Bq25730<embedded_hal_mock::eh1::i2c::Mock> {
