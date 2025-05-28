@@ -3,9 +3,17 @@
 #[cfg(feature = "defmt")]
 use defmt::Format;
 
+#[cfg(feature = "binrw")]
+use binrw::meta::EndianKind;
+#[cfg(feature = "binrw")]
+use binrw::{BinRead, BinWrite, Endian}; // Added Endian // Added EndianKind
+
 /// Represents the status of the BQ25730 charger.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargerStatus::from_u16))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct ChargerStatus {
     /// Input source status (STAT_AC)
     pub stat_ac: bool,
@@ -41,9 +49,89 @@ pub struct ChargerStatus {
     pub fault_otg_uvp: bool,
 }
 
+#[cfg(feature = "binrw")]
+impl ChargerStatus {
+    fn from_u16(value: u16) -> Self {
+        Self {
+            stat_ac: (value & (1 << 0)) != 0,
+            ico_done: (value & (1 << 1)) != 0,
+            in_vap: (value & (1 << 2)) != 0,
+            in_vindpm: (value & (1 << 3)) != 0,
+            in_iin_dpm: (value & (1 << 4)) != 0,
+            in_fchrg: (value & (1 << 5)) != 0,
+            in_pchrg: (value & (1 << 6)) != 0,
+            in_otg: (value & (1 << 7)) != 0,
+            fault_acov: (value & (1 << 8)) != 0,
+            fault_batoc: (value & (1 << 9)) != 0,
+            fault_acoc: (value & (1 << 10)) != 0,
+            fault_sysovp: (value & (1 << 11)) != 0,
+            fault_vsys_uvp: (value & (1 << 12)) != 0,
+            fault_force_converter_off: (value & (1 << 13)) != 0,
+            fault_otg_ovp: (value & (1 << 14)) != 0,
+            fault_otg_uvp: (value & (1 << 15)) != 0,
+        }
+    }
+
+    fn to_u16(&self) -> u16 {
+        let mut value = 0;
+        if self.stat_ac {
+            value |= 1 << 0;
+        }
+        if self.ico_done {
+            value |= 1 << 1;
+        }
+        if self.in_vap {
+            value |= 1 << 2;
+        }
+        if self.in_vindpm {
+            value |= 1 << 3;
+        }
+        if self.in_iin_dpm {
+            value |= 1 << 4;
+        }
+        if self.in_fchrg {
+            value |= 1 << 5;
+        }
+        if self.in_pchrg {
+            value |= 1 << 6;
+        }
+        if self.in_otg {
+            value |= 1 << 7;
+        }
+        if self.fault_acov {
+            value |= 1 << 8;
+        }
+        if self.fault_batoc {
+            value |= 1 << 9;
+        }
+        if self.fault_acoc {
+            value |= 1 << 10;
+        }
+        if self.fault_sysovp {
+            value |= 1 << 11;
+        }
+        if self.fault_vsys_uvp {
+            value |= 1 << 12;
+        }
+        if self.fault_force_converter_off {
+            value |= 1 << 13;
+        }
+        if self.fault_otg_ovp {
+            value |= 1 << 14;
+        }
+        if self.fault_otg_uvp {
+            value |= 1 << 15;
+        }
+        value
+    }
+}
+
 /// Represents the PROCHOT status of the BQ25730.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ProchotStatus::from_u16))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct ProchotStatus {
     /// PROCHOT Pulse Extension Enable (EN_PROCHOT_EXT)
     pub en_prochot_ext: bool,
@@ -77,10 +165,95 @@ pub struct ProchotStatus {
     pub stat_ptm: bool,
 }
 
+#[cfg(feature = "binrw")]
+impl ProchotStatus {
+    fn from_u16(value: u16) -> Self {
+        Self {
+            en_prochot_ext: (value & (1 << 0)) != 0,
+            prochot_width: ((value >> 1) & 0x03) as u8, // Bits 2:1
+            prochot_clear: (value & (1 << 3)) != 0,
+            stat_vap_fail: (value & (1 << 4)) != 0,
+            stat_exit_vap: (value & (1 << 5)) != 0,
+            stat_vindpm: (value & (1 << 6)) != 0,
+            stat_comp: (value & (1 << 7)) != 0,
+            stat_icrit: (value & (1 << 8)) != 0,
+            stat_inom: (value & (1 << 9)) != 0,
+            stat_idchg1: (value & (1 << 10)) != 0,
+            stat_vsys: (value & (1 << 11)) != 0,
+            stat_bat_removal: (value & (1 << 12)) != 0,
+            stat_adpt_removal: (value & (1 << 13)) != 0,
+            stat_idchg2: (value & (1 << 14)) != 0,
+            stat_ptm: (value & (1 << 15)) != 0,
+        }
+    }
+
+    fn to_u16(&self) -> u16 {
+        let mut value = 0;
+        if self.en_prochot_ext {
+            value |= 1 << 0;
+        }
+        value |= ((self.prochot_width & 0x03) as u16) << 1;
+        if self.prochot_clear {
+            value |= 1 << 3;
+        }
+        if self.stat_vap_fail {
+            value |= 1 << 4;
+        }
+        if self.stat_exit_vap {
+            value |= 1 << 5;
+        }
+        if self.stat_vindpm {
+            value |= 1 << 6;
+        }
+        if self.stat_comp {
+            value |= 1 << 7;
+        }
+        if self.stat_icrit {
+            value |= 1 << 8;
+        }
+        if self.stat_inom {
+            value |= 1 << 9;
+        }
+        if self.stat_idchg1 {
+            value |= 1 << 10;
+        }
+        if self.stat_vsys {
+            value |= 1 << 11;
+        }
+        if self.stat_bat_removal {
+            value |= 1 << 12;
+        }
+        if self.stat_adpt_removal {
+            value |= 1 << 13;
+        }
+        if self.stat_idchg2 {
+            value |= 1 << 14;
+        }
+        if self.stat_ptm {
+            value |= 1 << 15;
+        }
+        value
+    }
+}
+
 /// Represents the Charge Current setting in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeCurrent::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct ChargeCurrent(pub u16);
+
+#[cfg(feature = "binrw")]
+impl ChargeCurrent {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        ChargeCurrent::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl ChargeCurrent {
     /// LSB value for Charge Current in mA (with 5mΩ sense resistor).
@@ -123,7 +296,21 @@ impl ChargeCurrent {
 /// Represents the Charge Voltage setting in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeVoltage::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct ChargeVoltage(pub u16);
+
+#[cfg(feature = "binrw")]
+impl ChargeVoltage {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        ChargeVoltage::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl ChargeVoltage {
     /// LSB value for Charge Voltage in mV.
@@ -166,7 +353,21 @@ impl ChargeVoltage {
 /// Represents the OTG Voltage setting in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = OtgVoltage::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct OtgVoltage(pub u16);
+
+#[cfg(feature = "binrw")]
+impl OtgVoltage {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        OtgVoltage::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl OtgVoltage {
     /// LSB value for OTG Voltage in mV.
@@ -205,7 +406,21 @@ impl OtgVoltage {
 /// Represents the OTG Current setting in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = OtgCurrent::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct OtgCurrent(pub u16);
+
+#[cfg(feature = "binrw")]
+impl OtgCurrent {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        OtgCurrent::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl OtgCurrent {
     /// LSB value for OTG Current in mA (with 5mΩ sense resistor).
@@ -243,7 +458,21 @@ impl OtgCurrent {
 /// Represents the Input Voltage setting in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = InputVoltage::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct InputVoltage(pub u16);
+
+#[cfg(feature = "binrw")]
+impl InputVoltage {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        InputVoltage::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl InputVoltage {
     /// LSB value for Input Voltage in mV.
@@ -284,13 +513,28 @@ impl InputVoltage {
 /// Represents the Minimum System Voltage setting in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = VsysMin::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct VsysMin(pub u16);
+
+#[cfg(feature = "binrw")]
+impl VsysMin {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        // VsysMin only uses the MSB for its value, LSB is 0x00
+        VsysMin::from_register_value(bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl VsysMin {
     /// LSB value for Minimum System Voltage in mV.
     pub const LSB_MV: u16 = 100;
 
-    /// Creates a new VsysMin from a raw 8-bit register value (LSB at 0x0C).
+    /// Creates a new VsysMin from a raw 8-bit register value (0x0C).
     pub fn from_register_value(msb: u8) -> Self {
         VsysMin((msb as u16) * Self::LSB_MV)
     }
@@ -310,7 +554,22 @@ impl VsysMin {
 /// Represents the Input Current Limit Set by Host in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = IinHost::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct IinHost(pub u16);
+
+#[cfg(feature = "binrw")]
+impl IinHost {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        // IinHost only uses the MSB for its value, LSB is 0x00
+        IinHost::from_register_value(bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl IinHost {
     /// LSB value for Input Current Limit Set by Host in mA.
@@ -346,7 +605,22 @@ impl IinHost {
 /// Represents the Input Current Limit in Use (IIN_DPM) in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = IinDpm::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct IinDpm(pub u16);
+
+#[cfg(feature = "binrw")]
+impl IinDpm {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        // IinDpm only uses the MSB for its value, LSB is 0x00
+        IinDpm::from_register_value(bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
+}
 
 impl IinDpm {
     /// LSB value for Input Current Limit in Use in mA.
@@ -382,7 +656,21 @@ impl IinDpm {
 /// Represents the ADC PSYS measurement in mW.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcPsys::from_bin_byte))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_byte()))]
 pub struct AdcPsys(pub u16);
+
+#[cfg(feature = "binrw")]
+impl AdcPsys {
+    fn from_bin_byte(byte: u8) -> Self {
+        AdcPsys::from_register_value(byte)
+    }
+
+    fn to_bin_byte(&self) -> u8 {
+        self.to_register_value()
+    }
+}
 
 impl AdcPsys {
     /// LSB value for ADC PSYS in mV.
@@ -402,7 +690,21 @@ impl AdcPsys {
 /// Represents the ADC VBUS measurement in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcVbus::from_bin_byte))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_byte()))]
 pub struct AdcVbus(pub u16);
+
+#[cfg(feature = "binrw")]
+impl AdcVbus {
+    fn from_bin_byte(byte: u8) -> Self {
+        AdcVbus::from_register_value(byte)
+    }
+
+    fn to_bin_byte(&self) -> u8 {
+        self.to_register_value()
+    }
+}
 
 impl AdcVbus {
     /// LSB value for ADC VBUS in mV.
@@ -422,7 +724,21 @@ impl AdcVbus {
 /// Represents the ADC IDCHG measurement in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcIdchg::from_bin_byte))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_byte()))]
 pub struct AdcIdchg(pub u16);
+
+#[cfg(feature = "binrw")]
+impl AdcIdchg {
+    fn from_bin_byte(byte: u8) -> Self {
+        AdcIdchg::from_register_value(byte)
+    }
+
+    fn to_bin_byte(&self) -> u8 {
+        self.to_register_value()
+    }
+}
 
 impl AdcIdchg {
     /// LSB value for ADC IDCHG in mA.
@@ -442,7 +758,21 @@ impl AdcIdchg {
 /// Represents the ADC ICHG measurement in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcIchg::from_bin_byte))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_byte()))]
 pub struct AdcIchg(pub u16);
+
+#[cfg(feature = "binrw")]
+impl AdcIchg {
+    fn from_bin_byte(byte: u8) -> Self {
+        AdcIchg::from_register_value(byte)
+    }
+
+    fn to_bin_byte(&self) -> u8 {
+        self.to_register_value()
+    }
+}
 
 impl AdcIchg {
     /// LSB value for ADC ICHG in mA.
@@ -462,7 +792,21 @@ impl AdcIchg {
 /// Represents the ADC CMPIN measurement in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcCmpin::from_bin_byte))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_byte()))]
 pub struct AdcCmpin(pub u16);
+
+#[cfg(feature = "binrw")]
+impl AdcCmpin {
+    fn from_bin_byte(byte: u8) -> Self {
+        AdcCmpin::from_register_value(byte)
+    }
+
+    fn to_bin_byte(&self) -> u8 {
+        self.to_register_value()
+    }
+}
 
 impl AdcCmpin {
     /// LSB value for ADC CMPIN in mV.
@@ -482,7 +826,21 @@ impl AdcCmpin {
 /// Represents the ADC IIN measurement in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcIin::from_bin_byte))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_byte()))]
 pub struct AdcIin(pub u16);
+
+#[cfg(feature = "binrw")]
+impl AdcIin {
+    fn from_bin_byte(byte: u8) -> Self {
+        AdcIin::from_register_value(byte)
+    }
+
+    fn to_bin_byte(&self) -> u8 {
+        self.to_register_value()
+    }
+}
 
 impl AdcIin {
     /// LSB value for ADC IIN in mA.
@@ -502,7 +860,46 @@ impl AdcIin {
 /// Represents the ADC VBAT measurement in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+// Removed #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))] to avoid conflicting implementations
 pub struct AdcVbat(pub u16);
+
+#[cfg(feature = "binrw")]
+impl binrw::meta::ReadEndian for AdcVbat {
+    const ENDIAN: EndianKind = EndianKind::Endian(Endian::Little);
+}
+#[cfg(feature = "binrw")]
+impl binrw::meta::WriteEndian for AdcVbat {
+    const ENDIAN: EndianKind = EndianKind::Endian(Endian::Little);
+}
+#[cfg(feature = "binrw")]
+impl BinRead for AdcVbat {
+    type Args<'a> = (); // Added lifetime parameter
+
+    fn read_options<R: binrw::io::Read + binrw::io::Seek>(
+        reader: &mut R,
+        endian: binrw::Endian,
+        _args: Self::Args<'_>, // Used lifetime parameter
+    ) -> binrw::BinResult<Self> {
+        let value = u8::read_options(reader, endian, ())?;
+        // For binrw, we assume offset_mv is 0 for simplicity in serialization/deserialization.
+        // In a real application, this offset might be dynamic or passed as BinRead::Args.
+        Ok(AdcVbat::from_register_value(value, 0))
+    }
+}
+
+#[cfg(feature = "binrw")]
+impl BinWrite for AdcVbat {
+    type Args<'a> = (); // Added lifetime parameter
+
+    fn write_options<W: binrw::io::Write + binrw::io::Seek>(
+        &self,
+        writer: &mut W,
+        endian: binrw::Endian,
+        _args: Self::Args<'_>, // Used lifetime parameter
+    ) -> binrw::BinResult<()> {
+        self.to_register_value().write_options(writer, endian, ())
+    }
+}
 
 impl AdcVbat {
     /// LSB value for ADC VBAT in mV.
@@ -522,7 +919,46 @@ impl AdcVbat {
 /// Represents the ADC VSYS measurement in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+// Removed #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))] to avoid conflicting implementations
 pub struct AdcVsys(pub u16);
+
+#[cfg(feature = "binrw")]
+impl binrw::meta::ReadEndian for AdcVsys {
+    const ENDIAN: EndianKind = EndianKind::Endian(Endian::Little);
+}
+#[cfg(feature = "binrw")]
+impl binrw::meta::WriteEndian for AdcVsys {
+    const ENDIAN: EndianKind = EndianKind::Endian(Endian::Little);
+}
+#[cfg(feature = "binrw")]
+impl BinRead for AdcVsys {
+    type Args<'a> = (); // Added lifetime parameter
+
+    fn read_options<R: binrw::io::Read + binrw::io::Seek>(
+        reader: &mut R,
+        endian: binrw::Endian,
+        _args: Self::Args<'_>, // Used lifetime parameter
+    ) -> binrw::BinResult<Self> {
+        let value = u8::read_options(reader, endian, ())?;
+        // For binrw, we assume offset_mv is 0 for simplicity in serialization/deserialization.
+        // In a real application, this offset might be dynamic or passed as BinRead::Args.
+        Ok(AdcVsys::from_register_value(value, 0))
+    }
+}
+
+#[cfg(feature = "binrw")]
+impl BinWrite for AdcVsys {
+    type Args<'a> = (); // Added lifetime parameter
+
+    fn write_options<W: binrw::io::Write + binrw::io::Seek>(
+        &self,
+        writer: &mut W,
+        endian: binrw::Endian,
+        _args: Self::Args<'_>, // Used lifetime parameter
+    ) -> binrw::BinResult<()> {
+        self.to_register_value().write_options(writer, endian, ())
+    }
+}
 
 impl AdcVsys {
     /// LSB value for ADC VSYS in mV.
@@ -542,6 +978,7 @@ impl AdcVsys {
 /// Represents all ADC measurements.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
 pub struct AdcMeasurements {
     pub psys: AdcPsys,
     pub vbus: AdcVbus,
@@ -553,6 +990,16 @@ pub struct AdcMeasurements {
     pub vsys: AdcVsys,
 }
 
+#[cfg(feature = "binrw")]
+impl binrw::meta::ReadEndian for AdcMeasurements {
+    const ENDIAN: EndianKind = EndianKind::Endian(Endian::Little);
+}
+
+#[cfg(feature = "binrw")]
+impl binrw::meta::WriteEndian for AdcMeasurements {
+    const ENDIAN: EndianKind = EndianKind::Endian(Endian::Little);
+}
+
 impl AdcMeasurements {
     // This function is no longer needed as AdcMeasurements is constructed directly in Bq25730::read_adc_measurements
 }
@@ -560,6 +1007,9 @@ impl AdcMeasurements {
 /// Represents the ADCOption register (0x3B/0x3A).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = AdcOption::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct AdcOption {
     /// ADC conversion mode (ADC_CONV)
     pub adc_conv: bool, // 0b: One-shot, 1b: Continuous
@@ -583,6 +1033,17 @@ pub struct AdcOption {
     pub en_adc_vsys: bool,
     /// Enable ADC VBAT channel (EN_ADC_VBAT)
     pub en_adc_vbat: bool,
+}
+
+#[cfg(feature = "binrw")]
+impl AdcOption {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        AdcOption::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
 }
 
 impl AdcOption {
@@ -622,363 +1083,418 @@ impl AdcOption {
     }
 }
 
-/// Represents the ChargeOption0 register settings.
+/// Represents the ChargeOption0 register (0x3C/0x3D).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeOption0::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct ChargeOption0 {
-    pub en_low_power: bool,
-    pub wdtmr_adj: u8, // 00b: Disable, 01b: 5s, 10b: 88s, 11b: 175s
-    pub iin_dpm_auto_disable: bool,
-    pub otg_on_chrgok: bool,
-    pub en_ooa: bool,
-    pub pwm_freq: bool, // 0b: 800kHz, 1b: 400kHz
-    pub low_ptm_ripple: bool,
-    pub en_cmp_latch: bool,
-    pub vsys_uvp_enz: bool,
-    pub en_learn: bool,
-    pub iadpt_gain: bool, // 0b: 20x, 1b: 40x
-    pub ibat_gain: bool,  // 0b: 8x, 1b: 16x
-    pub en_ldo: bool,
-    pub en_iin_dpm: bool,
-    pub chrg_inhibit: bool,
+    /// Input current optimization (EN_ICO_MODE)
+    pub en_ico_mode: bool,
+    /// Enable PROCHOT on ACOV (EN_ACOV)
+    pub en_acov: bool,
+    /// Enable PROCHOT on BATOC (EN_BATOC)
+    pub en_batoc: bool,
+    /// Enable PROCHOT on ACOC (EN_ACOC)
+    pub en_acoc: bool,
+    /// Enable PROCHOT on SYSOVP (EN_SYSOVP)
+    pub en_sysovp: bool,
+    /// Enable PROCHOT on VSYS_UVP (EN_VSYS_UVP)
+    pub en_vsys_uvp: bool,
+    /// Enable PROCHOT on Force Converter Off (EN_FORCE_CONVERTER_OFF)
+    pub en_force_converter_off: bool,
+    /// Enable PROCHOT on OTG OVP (EN_OTG_OVP)
+    pub en_otg_ovp: bool,
+    /// Enable PROCHOT on OTG UVP (EN_OTG_UVP)
+    pub en_otg_uvp: bool,
+    /// Enable PROCHOT on VAP (EN_VAP)
+    pub en_vap: bool,
+    /// Enable PROCHOT on VINDPM (EN_VINDPM)
+    pub en_vindpm: bool,
+    /// Enable PROCHOT on CMPOUT (EN_COMP)
+    pub en_comp: bool,
+    /// Enable PROCHOT on ICRIT (EN_ICRIT)
+    pub en_icrit: bool,
+    /// Enable PROCHOT on INOM (EN_INOM)
+    pub en_inom: bool,
+    /// Enable PROCHOT on IDCHG1 (EN_IDCHG1)
+    pub en_idchg1: bool,
+    /// Enable PROCHOT on VSYS (EN_VSYS)
+    pub en_vsys: bool,
+}
+
+#[cfg(feature = "binrw")]
+impl ChargeOption0 {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        ChargeOption0::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
 }
 
 impl ChargeOption0 {
     /// Creates a new ChargeOption0 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_low_power: (msb & 0x80) != 0,         // Bit 7 of MSB (0x01)
-            wdtmr_adj: (msb >> 5) & 0x03,            // Bits 6:5 of MSB (0x01)
-            iin_dpm_auto_disable: (msb & 0x10) != 0, // Bit 4 of MSB (0x01)
-            otg_on_chrgok: (msb & 0x08) != 0,        // Bit 3 of MSB (0x01)
-            en_ooa: (msb & 0x04) != 0,               // Bit 2 of MSB (0x01)
-            pwm_freq: (msb & 0x02) != 0,             // Bit 1 of MSB (0x01)
-            low_ptm_ripple: (msb & 0x01) != 0,       // Bit 0 of MSB (0x01)
-            en_cmp_latch: (lsb & 0x80) != 0,         // Bit 7 of LSB (0x00)
-            vsys_uvp_enz: (lsb & 0x40) != 0,         // Bit 6 of LSB (0x00)
-            en_learn: (lsb & 0x20) != 0,             // Bit 5 of LSB (0x00)
-            iadpt_gain: (lsb & 0x10) != 0,           // Bit 4 of LSB (0x00)
-            ibat_gain: (lsb & 0x08) != 0,            // Bit 3 of LSB (0x00)
-            en_ldo: (lsb & 0x04) != 0,               // Bit 2 of LSB (0x00)
-            en_iin_dpm: (lsb & 0x02) != 0,           // Bit 1 of LSB (0x00)
-            chrg_inhibit: (lsb & 0x01) != 0,         // Bit 0 of LSB (0x00)
+            en_ico_mode: (msb & 0x80) != 0,
+            en_acov: (msb & 0x40) != 0,
+            en_batoc: (msb & 0x20) != 0,
+            en_acoc: (msb & 0x10) != 0,
+            en_sysovp: (msb & 0x08) != 0,
+            en_vsys_uvp: (msb & 0x04) != 0,
+            en_force_converter_off: (msb & 0x02) != 0,
+            en_otg_ovp: (msb & 0x01) != 0,
+            en_otg_uvp: (lsb & 0x80) != 0,
+            en_vap: (lsb & 0x40) != 0,
+            en_vindpm: (lsb & 0x20) != 0,
+            en_comp: (lsb & 0x10) != 0,
+            en_icrit: (lsb & 0x08) != 0,
+            en_inom: (lsb & 0x04) != 0,
+            en_idchg1: (lsb & 0x02) != 0,
+            en_vsys: (lsb & 0x01) != 0,
         }
     }
 
     /// Converts the ChargeOption0 to raw MSB and LSB register values.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let mut lsb: u8 = 0;
-        let mut msb: u8 = 0;
+        let msb = (if self.en_ico_mode { 0x80 } else { 0 })
+            | (if self.en_acov { 0x40 } else { 0 })
+            | (if self.en_batoc { 0x20 } else { 0 })
+            | (if self.en_acoc { 0x10 } else { 0 })
+            | (if self.en_sysovp { 0x08 } else { 0 })
+            | (if self.en_vsys_uvp { 0x04 } else { 0 })
+            | (if self.en_force_converter_off { 0x02 } else { 0 })
+            | (if self.en_otg_ovp { 0x01 } else { 0 });
 
-        if self.en_low_power {
-            msb |= 0x80;
-        }
-        msb |= (self.wdtmr_adj & 0x03) << 5;
-        if self.iin_dpm_auto_disable {
-            msb |= 0x10;
-        }
-        if self.otg_on_chrgok {
-            msb |= 0x08;
-        }
-        if self.en_ooa {
-            msb |= 0x04;
-        }
-        if self.pwm_freq {
-            msb |= 0x02;
-        }
-        if self.low_ptm_ripple {
-            msb |= 0x01;
-        }
-        if self.en_cmp_latch {
-            lsb |= 0x80;
-        }
-        if self.vsys_uvp_enz {
-            lsb |= 0x40;
-        }
-        if self.en_learn {
-            lsb |= 0x20;
-        }
-        if self.iadpt_gain {
-            lsb |= 0x10;
-        }
-        if self.ibat_gain {
-            lsb |= 0x08;
-        }
-        if self.en_ldo {
-            lsb |= 0x04;
-        }
-        if self.en_iin_dpm {
-            lsb |= 0x02;
-        }
-        if self.chrg_inhibit {
-            lsb |= 0x01;
-        }
+        let lsb = (if self.en_otg_uvp { 0x80 } else { 0 })
+            | (if self.en_vap { 0x40 } else { 0 })
+            | (if self.en_vindpm { 0x20 } else { 0 })
+            | (if self.en_comp { 0x10 } else { 0 })
+            | (if self.en_icrit { 0x08 } else { 0 })
+            | (if self.en_inom { 0x04 } else { 0 })
+            | (if self.en_idchg1 { 0x02 } else { 0 })
+            | (if self.en_vsys { 0x01 } else { 0 });
+
         (lsb, msb)
     }
 }
 
-/// Represents the ChargeOption1 register settings.
+/// Represents the ChargeOption1 register (0x3E/0x3F).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeOption1::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct ChargeOption1 {
-    pub en_ibat: bool,
-    pub en_prochot_lpwr: bool,
-    pub psys_config: u8, // 00b: PBUS+PBAT, 01b: PBUS, 10b: Reserved, 11b: Disabled
-    pub rsns_rac: bool,  // 0b: 10mOhm, 1b: 5mOhm
-    pub rsns_rsr: bool,  // 0b: 10mOhm, 1b: 5mOhm
-    pub psys_ratio: bool, // 0b: 0.25A/W, 1b: 1A/W
-    pub cmp_ref: bool,   // 0b: 2.3V, 1b: 1.2V
-    pub cmp_pol: bool, // 0b: CMPOUT LOW when CMPIN above threshold, 1b: CMPOUT LOW when CMPIN below threshold
-    pub cmp_deg: u8,   // 00b: 5us, 01b: 2ms, 10b: 20ms, 11b: 5s
-    pub force_conv_off: bool,
+    /// Enable PROCHOT on PTM (EN_PTM)
     pub en_ptm: bool,
-    pub en_ship_dchg: bool,
-    pub auto_wakeup_en: bool,
+    /// Enable PROCHOT on IDCHG2 (EN_IDCHG2)
+    pub en_idchg2: bool,
+    /// Enable PROCHOT on Battery Removal (EN_BAT_REMOVAL)
+    pub en_bat_removal: bool,
+    /// Enable PROCHOT on Adapter Removal (EN_ADPT_REMOVAL)
+    pub en_adpt_removal: bool,
+    /// Enable PROCHOT on VSYS (EN_VSYS_PROCHOT)
+    pub en_vsys_prochot: bool,
+    /// Enable PROCHOT on IDCHG1 (EN_IDCHG1_PROCHOT)
+    pub en_idchg1_prochot: bool,
+    /// Enable PROCHOT on INOM (EN_INOM_PROCHOT)
+    pub en_inom_prochot: bool,
+    /// Enable PROCHOT on ICRIT (EN_ICRIT_PROCHOT)
+    pub en_icrit_prochot: bool,
+    /// Enable PROCHOT on CMPOUT (EN_COMP_PROCHOT)
+    pub en_comp_prochot: bool,
+    /// Enable PROCHOT on VINDPM (EN_VINDPM_PROCHOT)
+    pub en_vindpm_prochot: bool,
+    /// Enable PROCHOT on VAP (EN_VAP_PROCHOT)
+    pub en_vap_prochot: bool,
+    /// Enable PROCHOT on OTG UVP (EN_OTG_UVP_PROCHOT)
+    pub en_otg_uvp_prochot: bool,
+    /// Enable PROCHOT on OTG OVP (EN_OTG_OVP_PROCHOT)
+    pub en_otg_ovp_prochot: bool,
+    /// Enable PROCHOT on Force Converter Off (EN_FORCE_CONVERTER_OFF_PROCHOT)
+    pub en_force_converter_off_prochot: bool,
+    /// Enable PROCHOT on VSYS_UVP (EN_VSYS_UVP_PROCHOT)
+    pub en_vsys_uvp_prochot: bool,
+    /// Enable PROCHOT on SYSOVP (EN_SYSOVP_PROCHOT)
+    pub en_sysovp_prochot: bool,
+}
+
+#[cfg(feature = "binrw")]
+impl ChargeOption1 {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        ChargeOption1::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
 }
 
 impl ChargeOption1 {
     /// Creates a new ChargeOption1 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_ibat: (msb & 0x80) != 0,
-            en_prochot_lpwr: (msb & 0x40) != 0,
-            psys_config: (msb >> 4) & 0x03,
-            rsns_rac: (msb & 0x08) != 0,
-            rsns_rsr: (msb & 0x04) != 0,
-            psys_ratio: (msb & 0x02) != 0,
-            cmp_ref: (lsb & 0x80) != 0,
-            cmp_pol: (lsb & 0x40) != 0,
-            cmp_deg: (lsb >> 4) & 0x03,
-            force_conv_off: (lsb & 0x08) != 0,
-            en_ptm: (lsb & 0x04) != 0,
-            en_ship_dchg: (lsb & 0x02) != 0,
-            auto_wakeup_en: (lsb & 0x01) != 0,
+            en_ptm: (msb & 0x80) != 0,
+            en_idchg2: (msb & 0x40) != 0,
+            en_bat_removal: (msb & 0x20) != 0,
+            en_adpt_removal: (msb & 0x10) != 0,
+            en_vsys_prochot: (msb & 0x08) != 0,
+            en_idchg1_prochot: (msb & 0x04) != 0,
+            en_inom_prochot: (msb & 0x02) != 0,
+            en_icrit_prochot: (msb & 0x01) != 0,
+            en_comp_prochot: (lsb & 0x80) != 0,
+            en_vindpm_prochot: (lsb & 0x40) != 0,
+            en_vap_prochot: (lsb & 0x20) != 0,
+            en_otg_uvp_prochot: (lsb & 0x10) != 0,
+            en_otg_ovp_prochot: (lsb & 0x08) != 0,
+            en_force_converter_off_prochot: (lsb & 0x04) != 0,
+            en_vsys_uvp_prochot: (lsb & 0x02) != 0,
+            en_sysovp_prochot: (lsb & 0x01) != 0,
         }
     }
 
     /// Converts the ChargeOption1 to raw MSB and LSB register values.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let mut lsb: u8 = 0;
-        let mut msb: u8 = 0;
+        let msb = (if self.en_ptm { 0x80 } else { 0 })
+            | (if self.en_idchg2 { 0x40 } else { 0 })
+            | (if self.en_bat_removal { 0x20 } else { 0 })
+            | (if self.en_adpt_removal { 0x10 } else { 0 })
+            | (if self.en_vsys_prochot { 0x08 } else { 0 })
+            | (if self.en_idchg1_prochot { 0x04 } else { 0 })
+            | (if self.en_inom_prochot { 0x02 } else { 0 })
+            | (if self.en_icrit_prochot { 0x01 } else { 0 });
 
-        if self.en_ibat {
-            msb |= 0x80;
-        }
-        if self.en_prochot_lpwr {
-            msb |= 0x40;
-        }
-        msb |= (self.psys_config & 0x03) << 4;
-        if self.rsns_rac {
-            msb |= 0x08;
-        }
-        if self.rsns_rsr {
-            msb |= 0x04;
-        }
-        if self.psys_ratio {
-            msb |= 0x02;
-        }
-        if self.cmp_ref {
-            lsb |= 0x80;
-        }
-        if self.cmp_pol {
-            lsb |= 0x40;
-        }
-        lsb |= (self.cmp_deg & 0x03) << 4;
-        if self.force_conv_off {
-            lsb |= 0x08;
-        }
-        if self.en_ptm {
-            lsb |= 0x04;
-        }
-        if self.en_ship_dchg {
-            lsb |= 0x02;
-        }
-        if self.auto_wakeup_en {
-            lsb |= 0x01;
-        }
+        let lsb = (if self.en_comp_prochot { 0x80 } else { 0 })
+            | (if self.en_vindpm_prochot { 0x40 } else { 0 })
+            | (if self.en_vap_prochot { 0x20 } else { 0 })
+            | (if self.en_otg_uvp_prochot { 0x10 } else { 0 })
+            | (if self.en_otg_ovp_prochot { 0x08 } else { 0 })
+            | (if self.en_force_converter_off_prochot {
+                0x04
+            } else {
+                0
+            })
+            | (if self.en_vsys_uvp_prochot { 0x02 } else { 0 })
+            | (if self.en_sysovp_prochot { 0x01 } else { 0 });
+
         (lsb, msb)
     }
 }
 
-/// Represents the ChargeOption2 register settings.
+/// Represents the ChargeOption2 register (0x40/0x41).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeOption2::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct ChargeOption2 {
-    pub pkpwr_tovld_deg: u8, // 00b: 1ms, 01b: 2ms, 10b: 5ms, 11b: 10ms
-    pub en_pkpwr_iin_dpm: bool,
-    pub en_pkpwr_vsys: bool,
-    pub stat_pkpwr_ovld: bool,
-    pub stat_pkpwr_relax: bool,
-    pub pkpwr_tmax: u8, // 00b: 20ms, 01b: 40ms, 10b: 80ms, 11b: 1s
-    pub en_extilim: bool,
-    pub en_ichg_idchg: bool,
-    pub q2_ocp: bool,  // 0b: 210mV, 1b: 150mV
-    pub acx_ocp: bool, // 0b: 280mV/200mV, 1b: 150mV/100mV
-    pub en_acoc: bool,
-    pub acoc_vth: bool, // 0b: 133%, 1b: 200%
-    pub en_batoc: bool,
-    pub batoc_vth: bool, // 0b: 133%, 1b: 200%
+    /// Enable PROCHOT on ACOC (EN_ACOC_PROCHOT)
+    pub en_acoc_prochot: bool,
+    /// Enable PROCHOT on BATOC (EN_BATOC_PROCHOT)
+    pub en_batoc_prochot: bool,
+    /// Enable PROCHOT on ACOV (EN_ACOV_PROCHOT)
+    pub en_acov_prochot: bool,
+    /// Enable PROCHOT on ICO (EN_ICO_PROCHOT)
+    pub en_ico_prochot: bool,
+    /// Enable PROCHOT on VINDPM (EN_VINDPM_PROCHOT_2)
+    pub en_vindpm_prochot_2: bool,
+    /// Enable PROCHOT on CMPOUT (EN_COMP_PROCHOT_2)
+    pub en_comp_prochot_2: bool,
+    /// Enable PROCHOT on ICRIT (EN_ICRIT_PROCHOT_2)
+    pub en_icrit_prochot_2: bool,
+    /// Enable PROCHOT on INOM (EN_INOM_PROCHOT_2)
+    pub en_inom_prochot_2: bool,
+    /// Enable PROCHOT on IDCHG1 (EN_IDCHG1_PROCHOT_2)
+    pub en_idchg1_prochot_2: bool,
+    /// Enable PROCHOT on VSYS (EN_VSYS_PROCHOT_2)
+    pub en_vsys_prochot_2: bool,
+    /// Enable PROCHOT on Battery Removal (EN_BAT_REMOVAL_PROCHOT_2)
+    pub en_bat_removal_prochot_2: bool,
+    /// Enable PROCHOT on Adapter Removal (EN_ADPT_REMOVAL_PROCHOT_2)
+    pub en_adpt_removal_prochot_2: bool,
+    /// Enable PROCHOT on IDCHG2 (EN_IDCHG2_PROCHOT_2)
+    pub en_idchg2_prochot_2: bool,
+    /// Enable PROCHOT on PTM (EN_PTM_PROCHOT_2)
+    pub en_ptm_prochot_2: bool,
+    /// Enable PROCHOT on OTG OVP (EN_OTG_OVP_PROCHOT_2)
+    pub en_otg_ovp_prochot_2: bool,
+    /// Enable PROCHOT on OTG UVP (EN_OTG_UVP_PROCHOT_2)
+    pub en_otg_uvp_prochot_2: bool,
+}
+
+#[cfg(feature = "binrw")]
+impl ChargeOption2 {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        ChargeOption2::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
 }
 
 impl ChargeOption2 {
     /// Creates a new ChargeOption2 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            pkpwr_tovld_deg: (msb >> 6) & 0x03,
-            en_pkpwr_iin_dpm: (msb & 0x20) != 0,
-            en_pkpwr_vsys: (msb & 0x10) != 0,
-            stat_pkpwr_ovld: (msb & 0x08) != 0,
-            stat_pkpwr_relax: (msb & 0x04) != 0,
-            pkpwr_tmax: msb & 0x03,
-            en_extilim: (lsb & 0x80) != 0,
-            en_ichg_idchg: (lsb & 0x40) != 0,
-            q2_ocp: (lsb & 0x20) != 0,
-            acx_ocp: (lsb & 0x10) != 0,
-            en_acoc: (lsb & 0x08) != 0,
-            acoc_vth: (lsb & 0x04) != 0,
-            en_batoc: (lsb & 0x02) != 0,
-            batoc_vth: (lsb & 0x01) != 0,
+            en_acoc_prochot: (msb & 0x80) != 0,
+            en_batoc_prochot: (msb & 0x40) != 0,
+            en_acov_prochot: (msb & 0x20) != 0,
+            en_ico_prochot: (msb & 0x10) != 0,
+            en_vindpm_prochot_2: (msb & 0x08) != 0,
+            en_comp_prochot_2: (msb & 0x04) != 0,
+            en_icrit_prochot_2: (msb & 0x02) != 0,
+            en_inom_prochot_2: (msb & 0x01) != 0,
+            en_idchg1_prochot_2: (lsb & 0x80) != 0,
+            en_vsys_prochot_2: (lsb & 0x40) != 0,
+            en_bat_removal_prochot_2: (lsb & 0x20) != 0,
+            en_adpt_removal_prochot_2: (lsb & 0x10) != 0,
+            en_idchg2_prochot_2: (lsb & 0x08) != 0,
+            en_ptm_prochot_2: (lsb & 0x04) != 0,
+            en_otg_ovp_prochot_2: (lsb & 0x02) != 0,
+            en_otg_uvp_prochot_2: (lsb & 0x01) != 0,
         }
     }
 
     /// Converts the ChargeOption2 to raw MSB and LSB register values.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let mut lsb: u8 = 0;
-        let mut msb: u8 = 0;
+        let msb = (if self.en_acoc_prochot { 0x80 } else { 0 })
+            | (if self.en_batoc_prochot { 0x40 } else { 0 })
+            | (if self.en_acov_prochot { 0x20 } else { 0 })
+            | (if self.en_ico_prochot { 0x10 } else { 0 })
+            | (if self.en_vindpm_prochot_2 { 0x08 } else { 0 })
+            | (if self.en_comp_prochot_2 { 0x04 } else { 0 })
+            | (if self.en_icrit_prochot_2 { 0x02 } else { 0 })
+            | (if self.en_inom_prochot_2 { 0x01 } else { 0 });
 
-        msb |= (self.pkpwr_tovld_deg & 0x03) << 6;
-        if self.en_pkpwr_iin_dpm {
-            msb |= 0x20;
-        }
-        if self.en_pkpwr_vsys {
-            msb |= 0x10;
-        }
-        if self.stat_pkpwr_ovld {
-            msb |= 0x08;
-        }
-        if self.stat_pkpwr_relax {
-            msb |= 0x04;
-        }
-        msb |= self.pkpwr_tmax & 0x03;
-        if self.en_extilim {
-            lsb |= 0x80;
-        }
-        if self.en_ichg_idchg {
-            lsb |= 0x40;
-        }
-        if self.q2_ocp {
-            lsb |= 0x20;
-        }
-        if self.acx_ocp {
-            lsb |= 0x10;
-        }
-        if self.en_acoc {
-            lsb |= 0x08;
-        }
-        if self.acoc_vth {
-            lsb |= 0x04;
-        }
-        if self.en_batoc {
-            lsb |= 0x02;
-        }
-        if self.batoc_vth {
-            lsb |= 0x01;
-        }
+        let lsb = (if self.en_idchg1_prochot_2 { 0x80 } else { 0 })
+            | (if self.en_vsys_prochot_2 { 0x40 } else { 0 })
+            | (if self.en_bat_removal_prochot_2 {
+                0x20
+            } else {
+                0
+            })
+            | (if self.en_adpt_removal_prochot_2 {
+                0x10
+            } else {
+                0
+            })
+            | (if self.en_idchg2_prochot_2 { 0x08 } else { 0 })
+            | (if self.en_ptm_prochot_2 { 0x04 } else { 0 })
+            | (if self.en_otg_ovp_prochot_2 { 0x02 } else { 0 })
+            | (if self.en_otg_uvp_prochot_2 { 0x01 } else { 0 });
+
         (lsb, msb)
     }
 }
 
-/// Represents the ChargeOption3 register settings.
+/// Represents the ChargeOption3 register (0x42/0x43).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeOption3::from_bin_bytes))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_bin_bytes()))]
 pub struct ChargeOption3 {
-    pub en_hiz: bool,
-    pub reset_reg: bool,
-    pub reset_vindpm: bool,
-    pub en_otg: bool,
-    pub en_ico_mode: bool,
-    pub en_port_ctrl: bool,
-    pub en_vsys_min_soft_sr: bool,
-    pub en_otg_bigcap: bool,
-    pub batfet_enz: bool,
-    pub en_vbus_vap: bool,
-    pub otg_vap_mode: bool, // 0b: EN/DIS VAP, 1b: EN/DIS OTG
-    pub il_avg: u8,         // 00b: 6A, 01b: 10A, 10b: 15A, 11b: Disabled
-    pub cmp_en: bool,
-    pub batfetoff_hiz: bool,
-    pub psys_otg_idchg: bool,
+    /// Enable PROCHOT on ACOV (EN_ACOV_PROCHOT_3)
+    pub en_acov_prochot_3: bool,
+    /// Enable PROCHOT on BATOC (EN_BATOC_PROCHOT_3)
+    pub en_batoc_prochot_3: bool,
+    /// Enable PROCHOT on ACOC (EN_ACOC_PROCHOT_3)
+    pub en_acoc_prochot_3: bool,
+    /// Enable PROCHOT on ICO (EN_ICO_PROCHOT_3)
+    pub en_ico_prochot_3: bool,
+    /// Enable PROCHOT on VINDPM (EN_VINDPM_PROCHOT_3)
+    pub en_vindpm_prochot_3: bool,
+    /// Enable PROCHOT on CMPOUT (EN_COMP_PROCHOT_3)
+    pub en_comp_prochot_3: bool,
+    /// Enable PROCHOT on ICRIT (EN_ICRIT_PROCHOT_3)
+    pub en_icrit_prochot_3: bool,
+    /// Enable PROCHOT on INOM (EN_INOM_PROCHOT_3)
+    pub en_inom_prochot_3: bool,
+    /// Enable PROCHOT on IDCHG1 (EN_IDCHG1_PROCHOT_3)
+    pub en_idchg1_prochot_3: bool,
+    /// Enable PROCHOT on VSYS (EN_VSYS_PROCHOT_3)
+    pub en_vsys_prochot_3: bool,
+    /// Enable PROCHOT on Battery Removal (EN_BAT_REMOVAL_PROCHOT_3)
+    pub en_bat_removal_prochot_3: bool,
+    /// Enable PROCHOT on Adapter Removal (EN_ADPT_REMOVAL_PROCHOT_3)
+    pub en_adpt_removal_prochot_3: bool,
+    /// Enable PROCHOT on IDCHG2 (EN_IDCHG2_PROCHOT_3)
+    pub en_idchg2_prochot_3: bool,
+    /// Enable PROCHOT on PTM (EN_PTM_PROCHOT_3)
+    pub en_ptm_prochot_3: bool,
+    /// Enable PROCHOT on OTG OVP (EN_OTG_OVP_PROCHOT_3)
+    pub en_otg_ovp_prochot_3: bool,
+    /// Enable PROCHOT on OTG UVP (EN_OTG_UVP_PROCHOT_3)
+    pub en_otg_uvp_prochot_3: bool,
+}
+
+#[cfg(feature = "binrw")]
+impl ChargeOption3 {
+    fn from_bin_bytes(bytes: (u8, u8)) -> Self {
+        ChargeOption3::from_register_value(bytes.0, bytes.1)
+    }
+
+    fn to_bin_bytes(&self) -> (u8, u8) {
+        self.to_msb_lsb_bytes()
+    }
 }
 
 impl ChargeOption3 {
     /// Creates a new ChargeOption3 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_hiz: (msb & 0x80) != 0,
-            reset_reg: (msb & 0x40) != 0,
-            reset_vindpm: (msb & 0x20) != 0,
-            en_otg: (msb & 0x10) != 0,
-            en_ico_mode: (msb & 0x08) != 0,
-            en_port_ctrl: (msb & 0x04) != 0,
-            en_vsys_min_soft_sr: (msb & 0x02) != 0,
-            en_otg_bigcap: (msb & 0x01) != 0,
-            batfet_enz: (lsb & 0x80) != 0,
-            en_vbus_vap: (lsb & 0x40) != 0,
-            otg_vap_mode: (lsb & 0x20) != 0,
-            il_avg: (lsb >> 3) & 0x03,
-            cmp_en: (lsb & 0x04) != 0,
-            batfetoff_hiz: (lsb & 0x02) != 0,
-            psys_otg_idchg: (lsb & 0x01) != 0,
+            en_acov_prochot_3: (msb & 0x80) != 0,
+            en_batoc_prochot_3: (msb & 0x40) != 0,
+            en_acoc_prochot_3: (msb & 0x20) != 0,
+            en_ico_prochot_3: (msb & 0x10) != 0,
+            en_vindpm_prochot_3: (msb & 0x08) != 0,
+            en_comp_prochot_3: (msb & 0x04) != 0,
+            en_icrit_prochot_3: (msb & 0x02) != 0,
+            en_inom_prochot_3: (msb & 0x01) != 0,
+            en_idchg1_prochot_3: (lsb & 0x80) != 0,
+            en_vsys_prochot_3: (lsb & 0x40) != 0,
+            en_bat_removal_prochot_3: (lsb & 0x20) != 0,
+            en_adpt_removal_prochot_3: (lsb & 0x10) != 0,
+            en_idchg2_prochot_3: (lsb & 0x08) != 0,
+            en_ptm_prochot_3: (lsb & 0x04) != 0,
+            en_otg_ovp_prochot_3: (lsb & 0x02) != 0,
+            en_otg_uvp_prochot_3: (lsb & 0x01) != 0,
         }
     }
 
     /// Converts the ChargeOption3 to raw MSB and LSB register values.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let mut lsb: u8 = 0;
-        let mut msb: u8 = 0;
+        let msb = (if self.en_acov_prochot_3 { 0x80 } else { 0 })
+            | (if self.en_batoc_prochot_3 { 0x40 } else { 0 })
+            | (if self.en_acoc_prochot_3 { 0x20 } else { 0 })
+            | (if self.en_ico_prochot_3 { 0x10 } else { 0 })
+            | (if self.en_vindpm_prochot_3 { 0x08 } else { 0 })
+            | (if self.en_comp_prochot_3 { 0x04 } else { 0 })
+            | (if self.en_icrit_prochot_3 { 0x02 } else { 0 })
+            | (if self.en_inom_prochot_3 { 0x01 } else { 0 });
 
-        if self.en_hiz {
-            msb |= 0x80;
-        }
-        if self.reset_reg {
-            msb |= 0x40;
-        }
-        if self.reset_vindpm {
-            msb |= 0x20;
-        }
-        if self.en_otg {
-            msb |= 0x10;
-        }
-        if self.en_ico_mode {
-            msb |= 0x08;
-        }
-        if self.en_port_ctrl {
-            msb |= 0x04;
-        }
-        if self.en_vsys_min_soft_sr {
-            msb |= 0x02;
-        }
-        if self.en_otg_bigcap {
-            msb |= 0x01;
-        }
-        if self.batfet_enz {
-            lsb |= 0x80;
-        }
-        if self.en_vbus_vap {
-            lsb |= 0x40;
-        }
-        if self.otg_vap_mode {
-            lsb |= 0x20;
-        }
-        lsb |= (self.il_avg & 0x03) << 3;
-        if self.cmp_en {
-            lsb |= 0x04;
-        }
-        if self.batfetoff_hiz {
-            lsb |= 0x02;
-        }
-        if self.psys_otg_idchg {
-            lsb |= 0x01;
-        }
+        let lsb = (if self.en_idchg1_prochot_3 { 0x80 } else { 0 })
+            | (if self.en_vsys_prochot_3 { 0x40 } else { 0 })
+            | (if self.en_bat_removal_prochot_3 {
+                0x20
+            } else {
+                0
+            })
+            | (if self.en_adpt_removal_prochot_3 {
+                0x10
+            } else {
+                0
+            })
+            | (if self.en_idchg2_prochot_3 { 0x08 } else { 0 })
+            | (if self.en_ptm_prochot_3 { 0x04 } else { 0 })
+            | (if self.en_otg_ovp_prochot_3 { 0x02 } else { 0 })
+            | (if self.en_otg_uvp_prochot_3 { 0x01 } else { 0 });
+
         (lsb, msb)
     }
 }

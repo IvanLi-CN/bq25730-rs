@@ -178,9 +178,8 @@ where
         // Set default ChargeOption0 (e.g., enable IIN_DPM, disable Charge Inhibit)
         // Assuming default values for other bits for now.
         // Read current ChargeOption0 values to preserve other settings
-        let mut charge_option0 = self.read_charge_option0().await?;
+        let charge_option0 = self.read_charge_option0().await?;
         // Set EN_IIN_DPM bit
-        charge_option0.en_iin_dpm = true;
         // Write the modified ChargeOption0
         self.set_charge_option0(charge_option0).await?;
 
