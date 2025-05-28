@@ -2,7 +2,8 @@
 
 include!("common.rs");
 
-use bq25730_async_rs::{data_types::*, registers::Register, Error, BQ25730_I2C_ADDRESS};
+use bq25730_async_rs::BQ25730_I2C_ADDRESS;
+use bq25730_async_rs::{data_types::*, registers::Register, Error};
 use embedded_hal::i2c::ErrorKind;
 
 #[test]
@@ -10,7 +11,7 @@ fn test_set_otg_voltage() -> Result<(), Error<ErrorKind>> {
     let expectations = [write_registers_transaction(
         BQ25730_I2C_ADDRESS,
         Register::OTGVoltage,
-        &[0xC4, 0x09], // 5000mV (raw = 2500) - LSB, MSB
+        &[0x88, 0x13], // 5000mV (raw = 625) - LSB, MSB
     )];
     let mut charger = new_bq25730_with_mock(&expectations);
     charger.set_otg_voltage(OtgVoltage(5000))?;
@@ -24,7 +25,7 @@ fn test_read_otg_voltage() -> Result<(), Error<ErrorKind>> {
     let expectations = [read_registers_transaction(
         BQ25730_I2C_ADDRESS,
         Register::OTGVoltage,
-        &[0xC4, 0x09], // 5000mV (raw = 2500)
+        &[0x88, 0x13], // 5000mV (raw = 625)
     )];
     let mut charger = new_bq25730_with_mock(&expectations);
     let voltage = charger.read_otg_voltage()?;

@@ -50,37 +50,23 @@ fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
-    let expectations = [
-        read_registers_transaction(
-            BQ25730_I2C_ADDRESS,
-            Register::ProchotStatus,
-            &[0x01, 0x40], // LSB: STAT_ADPT_REMOVAL, MSB: EN_PROCHOT_EXT
-        ),
-        read_register_transaction(
-            BQ25730_I2C_ADDRESS,
-            Register::ChargeOption4,
-            0x02, // STAT_IDCHG2
-        ),
-    ];
+    let expectations = [read_registers_transaction(
+        BQ25730_I2C_ADDRESS,
+        Register::ProchotStatus,
+        &[0x01, 0x40], // LSB: STAT_ADPT_REMOVAL, MSB: EN_PROCHOT_EXT
+    )];
     let mut charger = new_bq25730_with_mock(&expectations);
     let status = charger.read_prochot_status()?;
     assert_eq!(status.en_prochot_ext, true);
     assert_eq!(status.stat_adpt_removal, true);
-    assert_eq!(status.stat_idchg2, true);
+    // assert_eq!(status.stat_idchg2, true); // Removed as ChargeOption4 is gone
     charger.i2c.done();
 
-    let expectations = [
-        read_registers_transaction(
-            BQ25730_I2C_ADDRESS,
-            Register::ProchotStatus,
-            &[0x00, 0x00], // All false
-        ),
-        read_register_transaction(
-            BQ25730_I2C_ADDRESS,
-            Register::ChargeOption4,
-            0x00, // All false
-        ),
-    ];
+    let expectations = [read_registers_transaction(
+        BQ25730_I2C_ADDRESS,
+        Register::ProchotStatus,
+        &[0x00, 0x00], // All false
+    )];
     let mut charger = new_bq25730_with_mock(&expectations);
     let status = charger.read_prochot_status()?;
     assert_eq!(status.en_prochot_ext, false);
@@ -96,8 +82,8 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
     assert_eq!(status.stat_vsys, false);
     assert_eq!(status.stat_bat_removal, false);
     assert_eq!(status.stat_adpt_removal, false);
-    assert_eq!(status.stat_idchg2, false);
-    assert_eq!(status.stat_ptm, false);
+    // assert_eq!(status.stat_idchg2, false); // Removed as ChargeOption4 is gone
+    // assert_eq!(status.stat_ptm, false); // Removed as ChargeOption4 is gone
     charger.i2c.done();
 
     Ok(())
@@ -140,7 +126,7 @@ fn test_read_adc_measurements() -> Result<(), Error<ErrorKind>> {
             bq25730_async_rs::BQ25730_I2C_ADDRESS,
             Register::ADCVBAT,
             0x01,
-        ), // 64mV
+        ), // 2944mV
         read_register_transaction(
             bq25730_async_rs::BQ25730_I2C_ADDRESS,
             Register::ADCVSYS,
@@ -155,8 +141,8 @@ fn test_read_adc_measurements() -> Result<(), Error<ErrorKind>> {
     assert_eq!(measurements.ichg.0, 128);
     assert_eq!(measurements.cmpin.0, 12);
     assert_eq!(measurements.iin.0, 100);
-    assert_eq!(measurements.vbat.0, 64);
-    assert_eq!(measurements.vsys.0, 64);
+    assert_eq!(measurements.vbat.0, 2880 + 64);
+    assert_eq!(measurements.vsys.0, 2880 + 64); // Corrected expected value based on LSB_MV and offset_mv
     charger.i2c.done();
 
     Ok(())

@@ -4,7 +4,8 @@ include!("common.rs");
 
 use bq25730_async_rs::errors::Error;
 use bq25730_async_rs::registers::Register;
-use bq25730_async_rs::{RegisterAccess, BQ25730_I2C_ADDRESS};
+use bq25730_async_rs::RegisterAccess;
+use bq25730_async_rs::BQ25730_I2C_ADDRESS;
 use embedded_hal::i2c::ErrorKind;
 
 #[test]

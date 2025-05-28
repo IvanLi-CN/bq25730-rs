@@ -57,10 +57,10 @@ pub enum Register {
     ADCCMPIN = 0x2A,
     /// ADCIIN Register
     ADCIIN = 0x2B,
-    /// ADCVSYS Register
-    ADCVSYS = 0x2C,
     /// ADCVBAT Register
-    ADCVBAT = 0x2D,
+    ADCVBAT = 0x2C,
+    /// ADCVSYS Register
+    ADCVSYS = 0x2D,
     /// ManufacturerID Register
     ManufacturerID = 0x2E,
     /// DeviceID Register
@@ -97,10 +97,6 @@ pub enum Register {
     VMINActiveProtection = 0x3E,
     /// VMIN Active Protection MSB Register
     VMINActiveProtectionMsb = 0x3F,
-    /// Ship Mode Register
-    ShipMode = 0x40,
-    /// Shutdown Control Register
-    ShutdownControl = 0x18, // Found in section 8.3.1.14
 }
 
 // ChargeOption0 (01/00h) bit masks
@@ -251,17 +247,3 @@ pub const CHARGE_OPTION4_PP_VBUS_VAP: u8 = 1 << 1;
 pub const CHARGE_OPTION4_STAT_VBUS_VAP: u8 = 1 << 0;
 
 pub const CHARGE_OPTION4_IDCHG_DEG2: u8 = 0b11 << 6;
-pub const CHARGE_OPTION4_IDCHG_TH2: u8 = 0b111 << 3;
-pub const CHARGE_OPTION4_PP_IDCHG2: u8 = 1 << 2;
-pub const CHARGE_OPTION4_STAT_IDCHG2: u8 = 1 << 1;
-pub const CHARGE_OPTION4_STAT_PTM: u8 = 1 << 0;
-
-// VMIN Active Protection (3F/3Eh) bit masks
-pub const VMIN_ACTIVE_PROTECTION_VBUS_VAP_TH: u8 = 0b1111111 << 1;
-
-pub const VMIN_ACTIVE_PROTECTION_VSYS_TH2: u8 = 0b111111 << 2;
-pub const VMIN_ACTIVE_PROTECTION_EN_VSYSTH2_FOLLOW_VSYSTH1: u8 = 1 << 1;
-pub const VMIN_ACTIVE_PROTECTION_EN_FRS: u8 = 1 << 0;
-
-// Shutdown Control (18h) bit masks
-// No specific bit masks defined in datasheet for this register, only value 0x10 for ship mode.

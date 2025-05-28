@@ -1,10 +1,10 @@
 [package]
-name = "stm32g031-bq25730-example"
+name = "bq25730_stm32g031g8_example"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [[bin]]
-name = "stm32g031-bq25730-example"
+name = "bq25730_stm32g031g8_example"
 path = "src/main.rs"
 test = false
 
@@ -33,8 +33,7 @@ embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "94f9b
 ] }
 
 defmt = { version = "1.0.1" }
-defmt-rtt = "0.4.0" # Add defmt-rtt for defmt exporter
-rtt-target = "0.5.0" # Add rtt-target for RTT initialization
+defmt-rtt = "1.0.0"
 
 cortex-m = { version = "0.7.7", features = [
   "inline-asm",
@@ -42,35 +41,29 @@ cortex-m = { version = "0.7.7", features = [
 ] }
 cortex-m-rt = "0.7.5"
 embedded-hal = "1.0.0"
-embedded-io-async = { version = "0.6.1" }
-panic-probe = { version = "0.3.0", features = ["print-defmt"] }
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 heapless = { version = "0.8", default-features = false }
 portable-atomic = { version = "1.11.0", features = ["critical-section"] }
-static_cell = "2.1.0" # Add static_cell dependency
-libm = "0.2.8" # Add libm dependency
-uom = { version = "0.37", default-features = false, features = ["si", "i32"] }
+static_cell = "2.1.0"
+libm = "0.2.8"
+uom = { version = "0.37", default-features = false, features = ["si", "f32"] }
 
-
-bq25730-async-rs = { path = "../../", features = ["async", "defmt"] }
+bq25730-async-rs = { version = "0.1.1", path = "../../", features = ["async", "defmt"] }
 
 [profile.dev]
-opt-level = 's'
+codegen-units = 1
 debug = 2
 debug-assertions = true
+incremental = false
+opt-level = 3
 overflow-checks = true
-panic = "abort"         # Added panic handler
-codegen-units = 1       # Added for consistency with release profile
 
 [profile.release]
 codegen-units = 1
 debug = 0
+strip = "symbols"
 debug-assertions = false
 incremental = false
 lto = 'fat'
-opt-level = 'z'
+opt-level = 3
 overflow-checks = false
-panic = "abort"          # Added panic handler
-
-[features]
-default = ["async"]
-async = []

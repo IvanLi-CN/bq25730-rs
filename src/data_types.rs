@@ -86,29 +86,32 @@ impl ChargeCurrent {
     /// LSB value for Charge Current in mA (with 5mΩ sense resistor).
     pub const LSB_MA: u16 = 128; // 128mA/LSB for 5mΩ sense resistor
 
-    /// Creates a new ChargeCurrent from a raw 13-bit register value.
-    /// The value is stored across two bytes (MSB at 0x03, LSB at 0x02).
-    /// The 13-bit value is formed by `((msb & 0x1F) << 8) | lsb`.
     /// Creates a new ChargeCurrent from raw LSB and MSB register values.
-    /// The 13-bit value (D12-D0) is formed by:
-    /// MSB (0x03): D12-D8 in bits 4:0
-    /// LSB (0x02): D7-D0 in bits 7:0
+    /// The 7-bit value (D6-D0) is formed by:
+    /// MSB (0x03): D6-D2 in bits 4:0
+    /// LSB (0x02): D1-D0 in bits 7:6
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
-        // ChargeCurrent is a 13-bit value (D12-D0)
-        // MSB (0x03): D6-D2 in bits 4:0
-        // LSB (0x02): D1-D0 in bits 7:6
-        let raw_value = (((msb & 0x1F) as u16) << 2) | (((lsb >> 6) & 0x03) as u16);
+        // D6-D2 are in msb bits 4:0
+        // D1-D0 are in lsb bits 7:6
+        let d6_d2 = (msb & 0x1F) as u16; // Extract bits 4:0 from msb
+        let d1_d0 = ((lsb >> 6) & 0x03) as u16; // Extract bits 7:6 from lsb
+
+        // Combine them to form a 7-bit raw_value (D6 D5 D4 D3 D2 D1 D0)
+        let raw_value = (d6_d2 << 2) | d1_d0;
         ChargeCurrent(raw_value * Self::LSB_MA)
     }
 
     /// Converts the ChargeCurrent to raw MSB and LSB register values.
+    /// The 7-bit value (D6-D0) is formed by:
+    /// MSB (0x03): D6-D2 in bits 4:0
+    /// LSB (0x02): D1-D0 in bits 7:6
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.0 / Self::LSB_MA;
-        // ChargeCurrent is a 13-bit value (D12-D0)
-        // MSB (0x03): D6-D2 in bits 4:0
-        // LSB (0x02): D1-D0 in bits 7:6
-        let lsb = ((raw_value & 0x01) << 6) as u8 | (((raw_value >> 1) & 0x01) << 7) as u8;
-        let msb = ((raw_value >> 2) & 0x1F) as u8;
+        // raw_value is a 7-bit value (D6-D0)
+        // msb (0x03) bits 4:0 should be D6-D2
+        // lsb (0x02) bits 7:6 should be D1-D0
+        let msb = ((raw_value >> 2) & 0x1F) as u8; // D6-D2
+        let lsb = ((raw_value & 0x03) << 6) as u8; // D1-D0 shifted to bits 7:6
         (lsb, msb)
     }
     /// Converts the ChargeCurrent to milliamps.
@@ -127,14 +130,17 @@ impl ChargeVoltage {
     pub const LSB_MV: u16 = 8; // 8mV/LSB
 
     /// Creates a new ChargeVoltage from raw LSB and MSB register values.
-    /// The 11-bit value (D10-D0) is formed by:
-    /// MSB (0x05): D10-D8 in bits 2:0
-    /// LSB (0x04): D7-D0 in bits 7:0
+    /// The 12-bit value (D11-D0) is formed by:
+    /// MSB (0x05): D11-D5 in bits 6:0
+    /// LSB (0x04): D4-D0 in bits 4:0
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
-        // ChargeVoltage is a 12-bit value (D11-D0)
-        // MSB (0x05): D11-D5 in bits 6:0
-        // LSB (0x04): D4-D0 in bits 4:0
-        let raw_value = (((msb & 0x7F) as u16) << 5) | ((lsb & 0x1F) as u16);
+        // D11-D5 are in msb bits 6:0
+        // D4-D0 are in lsb bits 4:0
+        let d11_d5 = (msb & 0x7F) as u16; // Extract bits 6:0 from msb
+        let d4_d0 = (lsb & 0x1F) as u16; // Extract bits 4:0 from lsb
+
+        // Combine them to form a 12-bit raw_value (D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 D0)
+        let raw_value = (d11_d5 << 5) | d4_d0;
         ChargeVoltage(raw_value * Self::LSB_MV)
     }
 
@@ -144,9 +150,12 @@ impl ChargeVoltage {
     /// LSB (0x04): D4-D0 in bits 4:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.0 / Self::LSB_MV;
+        // raw_value is a 12-bit value (D11-D0)
+        // msb (0x05) bits 6:0 should be D11-D5
+        // lsb (0x04) bits 4:0 should be D4-D0
         let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
         let lsb = (raw_value & 0x1F) as u8; // D4-D0
-        (lsb, msb) // LSB, MSB
+        (lsb, msb)
     }
     /// Converts the ChargeVoltage to millivolts.
     pub fn to_millivolts(&self) -> u16 {
@@ -161,22 +170,35 @@ pub struct OtgVoltage(pub u16);
 
 impl OtgVoltage {
     /// LSB value for OTG Voltage in mV.
-    pub const LSB_MV: u16 = 2; // 2mV/LSB based on empirical data from datasheet 7.5
+    pub const LSB_MV: u16 = 8; // 8mV/LSB based on datasheet 7.5
 
     /// Creates a new OtgVoltage from raw LSB and MSB register values.
-    /// OTGVoltage is a 16-bit value (MSB at 0x07, LSB at 0x06)
+    /// The 12-bit value (D11-D0) is formed by:
+    /// MSB (0x07): D11-D5 in bits 6:0
+    /// LSB (0x06): D4-D0 in bits 7:3
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
-        let raw_value = ((msb as u16) << 8) | (lsb as u16);
-        OtgVoltage(raw_value * Self::LSB_MV) // No offset based on empirical data
+        // D11-D5 are in msb bits 6:0
+        // D4-D0 are in lsb bits 7:3
+        let d11_d5 = (msb & 0x7F) as u16; // Extract bits 6:0 from msb
+        let d4_d0 = ((lsb >> 3) & 0x1F) as u16; // Extract bits 7:3 from lsb
+
+        // Combine them to form a 12-bit raw_value (D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 D0)
+        let raw_value = (d11_d5 << 5) | d4_d0;
+        OtgVoltage(raw_value * Self::LSB_MV)
     }
 
     /// Converts the OtgVoltage to raw MSB and LSB register values.
-    /// OTGVoltage is a 16-bit value (MSB at 0x07, LSB at 0x06)
+    /// The 12-bit value (D11-D0) is formed by:
+    /// MSB (0x07): D11-D5 in bits 6:0
+    /// LSB (0x06): D4-D0 in bits 7:3
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = self.0 / Self::LSB_MV; // No offset based on empirical data
-        let msb = (raw_value >> 8) as u8;
-        let lsb = (raw_value & 0xFF) as u8;
-        (lsb, msb) // LSB, MSB
+        let raw_value = self.0 / Self::LSB_MV;
+        // raw_value is a 12-bit value (D11-D0)
+        // msb (0x07) bits 6:0 should be D11-D5
+        // lsb (0x06) bits 7:3 should be D4-D0
+        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
+        let lsb = ((raw_value & 0x1F) << 3) as u8; // D4-D0 shifted to bits 7:3
+        (lsb, msb)
     }
 }
 
@@ -190,19 +212,18 @@ impl OtgCurrent {
     pub const LSB_MA: u16 = 100;
 
     /// Creates a new OtgCurrent from raw MSB and LSB register values.
-    /// The 10-bit value (D9-D0) is formed by:
-    /// MSB (0x09): D9-D8 in bits 1:0
-    /// LSB (0x08): D7-D0 in bits 7:0
+    /// The 7-bit value (D6-D0) is formed by:
+    /// MSB (0x09): D6-D0 in bits 6:0
+    /// LSB (0x08): Reserved
     pub fn from_register_value(_lsb: u8, msb: u8) -> Self {
-        // D9 is in bit 1 of MSB (0x09), D8 is in bit 0 of MSB (0x09)
         let raw_value = (msb & 0x7F) as u16; // D6-D0
         OtgCurrent(raw_value * Self::LSB_MA)
     }
 
     /// Converts the OtgCurrent to raw MSB and LSB register values.
-    /// The 10-bit value (D9-D0) is formed by:
-    /// MSB (0x09): D9-D8 in bits 1:0
-    /// LSB (0x08): D7-D0 in bits 7:0
+    /// The 7-bit value (D6-D0) is formed by:
+    /// MSB (0x09): D6-D0 in bits 6:0
+    /// LSB (0x08): Reserved
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.0 / Self::LSB_MA;
         // OTGCurrent is a 7-bit value (D6-D0)
@@ -232,16 +253,18 @@ impl InputVoltage {
 
     /// Creates a new InputVoltage from a raw 9-bit register value.
     /// The value is stored across two bytes (MSB at 0x0B, LSB at 0x0A).
-    /// The 9-bit value is formed by `((msb & 0x01) << 8) | lsb`.
+    /// The 9-bit value (D8-D0) is formed by:
+    /// MSB (0x0B): D8 in bit 5
+    /// LSB (0x0A): D7-D0 in bits 7:0
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
-        // D8 is in bit 7 of MSB (0x0B)
+        // D8 is in bit 5 of MSB (0x0B)
         let raw_value = (((msb >> 5) & 0x01) as u16) << 8 | (lsb as u16); // D8-D0 (D8 is bit 5 of MSB)
         InputVoltage(raw_value * Self::LSB_MV + Self::OFFSET_MV)
     }
 
     /// Converts the InputVoltage to raw MSB and LSB register values.
     /// The 9-bit value (D8-D0) is formed by:
-    /// MSB (0x0B): D8 in bit 7
+    /// MSB (0x0B): D8 in bit 5
     /// LSB (0x0A): D7-D0 in bits 7:0
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = (self.0 - Self::OFFSET_MV) / Self::LSB_MV;
@@ -485,9 +508,9 @@ impl AdcVbat {
     /// LSB value for ADC VBAT in mV.
     pub const LSB_MV: u16 = 64;
 
-    /// Creates a new AdcVbat from a raw 8-bit register value (0x2C).
-    pub fn from_register_value(value: u8) -> Self {
-        AdcVbat((value as u16) * Self::LSB_MV)
+    /// Creates a new AdcVbat from a raw 8-bit register value (0x2C) and an offset.
+    pub fn from_register_value(value: u8, offset_mv: u16) -> Self {
+        AdcVbat((value as u16) * Self::LSB_MV + offset_mv)
     }
 
     /// Converts the AdcVbat to a raw 8-bit register value.
@@ -505,9 +528,9 @@ impl AdcVsys {
     /// LSB value for ADC VSYS in mV.
     pub const LSB_MV: u16 = 64;
 
-    /// Creates a new AdcVsys from a raw 8-bit register value (0x2D).
-    pub fn from_register_value(value: u8) -> Self {
-        AdcVsys((value as u16) * Self::LSB_MV)
+    /// Creates a new AdcVsys from a raw 8-bit register value (0x2D) and an offset.
+    pub fn from_register_value(value: u8, offset_mv: u16) -> Self {
+        AdcVsys((value as u16) * Self::LSB_MV + offset_mv)
     }
 
     /// Converts the AdcVsys to a raw 8-bit register value.
@@ -531,63 +554,49 @@ pub struct AdcMeasurements {
 }
 
 impl AdcMeasurements {
-    /// Creates a new AdcMeasurements struct from raw register values.
-    pub fn from_register_values(values: &[u8]) -> Self {
-        Self {
-            psys: AdcPsys::from_register_value(values[0]),
-            vbus: AdcVbus::from_register_value(values[1]),
-            idchg: AdcIdchg::from_register_value(values[2]),
-            ichg: AdcIchg::from_register_value(values[3]),
-            cmpin: AdcCmpin::from_register_value(values[4]),
-            iin: AdcIin::from_register_value(values[5]),
-            vbat: AdcVbat::from_register_value(values[6]),
-            vsys: AdcVsys::from_register_value(values[7]),
-        }
-    }
+    // This function is no longer needed as AdcMeasurements is constructed directly in Bq25730::read_adc_measurements
 }
 
 /// Represents the ChargeOption0 register settings.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub struct ChargeOption0 {
-    pub en_cmp_latch: bool,
-    pub en_ichg_term: bool,
-    pub en_term_stat: bool,
-    pub en_chrg_inhibit: bool,
-    pub en_aicl_ichg: bool,
-    pub en_aicl_vbus: bool,
-    pub en_aicl_vsys: bool,
-    pub en_aicl_cmpoff: bool,
     pub en_low_power: bool,
-    pub en_otg_comp: bool,
-    pub en_otg_ichg: bool,
-    pub en_otg_vsys: bool,
-    pub en_otg_vbat: bool,
-    pub en_otg_iin: bool,
-    pub en_otg_cmpin: bool,
-    pub en_otg_vbus: bool,
+    pub wdtmr_adj: u8, // 00b: Disable, 01b: 5s, 10b: 88s, 11b: 175s
+    pub iin_dpm_auto_disable: bool,
+    pub otg_on_chrgok: bool,
+    pub en_ooa: bool,
+    pub pwm_freq: bool, // 0b: 800kHz, 1b: 400kHz
+    pub low_ptm_ripple: bool,
+    pub en_cmp_latch: bool,
+    pub vsys_uvp_enz: bool,
+    pub en_learn: bool,
+    pub iadpt_gain: bool, // 0b: 20x, 1b: 40x
+    pub ibat_gain: bool,  // 0b: 8x, 1b: 16x
+    pub en_ldo: bool,
+    pub en_iin_dpm: bool,
+    pub chrg_inhibit: bool,
 }
 
 impl ChargeOption0 {
     /// Creates a new ChargeOption0 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_cmp_latch: (lsb & 0x01) != 0,
-            en_ichg_term: (lsb & 0x02) != 0,
-            en_term_stat: (lsb & 0x04) != 0,
-            en_chrg_inhibit: (lsb & 0x08) != 0,
-            en_aicl_ichg: (lsb & 0x10) != 0,
-            en_aicl_vbus: (lsb & 0x20) != 0,
-            en_aicl_vsys: (lsb & 0x40) != 0,
-            en_aicl_cmpoff: (lsb & 0x80) != 0,
-            en_low_power: (msb & 0x01) != 0,
-            en_otg_comp: (msb & 0x02) != 0,
-            en_otg_ichg: (msb & 0x04) != 0,
-            en_otg_vsys: (msb & 0x08) != 0,
-            en_otg_vbat: (msb & 0x10) != 0,
-            en_otg_iin: (msb & 0x20) != 0,
-            en_otg_cmpin: (msb & 0x40) != 0,
-            en_otg_vbus: (msb & 0x80) != 0,
+            en_low_power: (msb & 0x80) != 0,         // Bit 7 of MSB (0x01)
+            wdtmr_adj: (msb >> 5) & 0x03,            // Bits 6:5 of MSB (0x01)
+            iin_dpm_auto_disable: (msb & 0x10) != 0, // Bit 4 of MSB (0x01)
+            otg_on_chrgok: (msb & 0x08) != 0,        // Bit 3 of MSB (0x01)
+            en_ooa: (msb & 0x04) != 0,               // Bit 2 of MSB (0x01)
+            pwm_freq: (msb & 0x02) != 0,             // Bit 1 of MSB (0x01)
+            low_ptm_ripple: (msb & 0x01) != 0,       // Bit 0 of MSB (0x01)
+            en_cmp_latch: (lsb & 0x80) != 0,         // Bit 7 of LSB (0x00)
+            vsys_uvp_enz: (lsb & 0x40) != 0,         // Bit 6 of LSB (0x00)
+            en_learn: (lsb & 0x20) != 0,             // Bit 5 of LSB (0x00)
+            iadpt_gain: (lsb & 0x10) != 0,           // Bit 4 of LSB (0x00)
+            ibat_gain: (lsb & 0x08) != 0,            // Bit 3 of LSB (0x00)
+            en_ldo: (lsb & 0x04) != 0,               // Bit 2 of LSB (0x00)
+            en_iin_dpm: (lsb & 0x02) != 0,           // Bit 1 of LSB (0x00)
+            chrg_inhibit: (lsb & 0x01) != 0,         // Bit 0 of LSB (0x00)
         }
     }
 
@@ -596,53 +605,48 @@ impl ChargeOption0 {
         let mut lsb: u8 = 0;
         let mut msb: u8 = 0;
 
-        if self.en_cmp_latch {
-            lsb |= 0x01;
-        }
-        if self.en_ichg_term {
-            lsb |= 0x02;
-        }
-        if self.en_term_stat {
-            lsb |= 0x04;
-        }
-        if self.en_chrg_inhibit {
-            lsb |= 0x08;
-        }
-        if self.en_aicl_ichg {
-            lsb |= 0x10;
-        }
-        if self.en_aicl_vbus {
-            lsb |= 0x20;
-        }
-        if self.en_aicl_vsys {
-            lsb |= 0x40;
-        }
-        if self.en_aicl_cmpoff {
-            lsb |= 0x80;
-        }
         if self.en_low_power {
-            msb |= 0x01;
+            msb |= 0x80;
         }
-        if self.en_otg_comp {
-            msb |= 0x02;
-        }
-        if self.en_otg_ichg {
-            msb |= 0x04;
-        }
-        if self.en_otg_vsys {
-            msb |= 0x08;
-        }
-        if self.en_otg_vbat {
+        msb |= (self.wdtmr_adj & 0x03) << 5;
+        if self.iin_dpm_auto_disable {
             msb |= 0x10;
         }
-        if self.en_otg_iin {
-            msb |= 0x20;
+        if self.otg_on_chrgok {
+            msb |= 0x08;
         }
-        if self.en_otg_cmpin {
-            msb |= 0x40;
+        if self.en_ooa {
+            msb |= 0x04;
         }
-        if self.en_otg_vbus {
-            msb |= 0x80;
+        if self.pwm_freq {
+            msb |= 0x02;
+        }
+        if self.low_ptm_ripple {
+            msb |= 0x01;
+        }
+        if self.en_cmp_latch {
+            lsb |= 0x80;
+        }
+        if self.vsys_uvp_enz {
+            lsb |= 0x40;
+        }
+        if self.en_learn {
+            lsb |= 0x20;
+        }
+        if self.iadpt_gain {
+            lsb |= 0x10;
+        }
+        if self.ibat_gain {
+            lsb |= 0x08;
+        }
+        if self.en_ldo {
+            lsb |= 0x04;
+        }
+        if self.en_iin_dpm {
+            lsb |= 0x02;
+        }
+        if self.chrg_inhibit {
+            lsb |= 0x01;
         }
         (lsb, msb)
     }
@@ -652,44 +656,38 @@ impl ChargeOption0 {
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub struct ChargeOption1 {
+    pub en_ibat: bool,
+    pub en_prochot_lpwr: bool,
+    pub psys_config: u8, // 00b: PBUS+PBAT, 01b: PBUS, 10b: Reserved, 11b: Disabled
+    pub rsns_rac: bool,  // 0b: 10mOhm, 1b: 5mOhm
+    pub rsns_rsr: bool,  // 0b: 10mOhm, 1b: 5mOhm
+    pub psys_ratio: bool, // 0b: 0.25A/W, 1b: 1A/W
+    pub cmp_ref: bool,   // 0b: 2.3V, 1b: 1.2V
+    pub cmp_pol: bool, // 0b: CMPOUT LOW when CMPIN above threshold, 1b: CMPOUT LOW when CMPIN below threshold
+    pub cmp_deg: u8,   // 00b: 5us, 01b: 2ms, 10b: 20ms, 11b: 5s
+    pub force_conv_off: bool,
+    pub en_ptm: bool,
     pub en_ship_dchg: bool,
-    pub en_hiz: bool,
-    pub en_chrg_pump: bool,
-    pub en_otg_pmp: bool,
-    pub en_otg_vsys_uvp: bool,
-    pub en_otg_vsys_ovp: bool,
-    pub en_otg_vbat_uvp: bool,
-    pub en_otg_vbat_ovp: bool,
-    pub en_otg_iin_ocp: bool,
-    pub en_otg_ichg_ocp: bool,
-    pub en_otg_cmpin_ocp: bool,
-    pub en_otg_vbus_ocp: bool,
-    pub en_otg_vsys_ocp: bool,
-    pub en_otg_vbat_ocp: bool,
-    pub en_otg_iin_ucp: bool,
-    pub en_otg_ichg_ucp: bool,
+    pub auto_wakeup_en: bool,
 }
 
 impl ChargeOption1 {
     /// Creates a new ChargeOption1 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_ship_dchg: (lsb & 0x01) != 0,
-            en_hiz: (lsb & 0x02) != 0,
-            en_chrg_pump: (lsb & 0x04) != 0,
-            en_otg_pmp: (lsb & 0x08) != 0,
-            en_otg_vsys_uvp: (lsb & 0x10) != 0,
-            en_otg_vsys_ovp: (lsb & 0x20) != 0,
-            en_otg_vbat_uvp: (lsb & 0x40) != 0,
-            en_otg_vbat_ovp: (lsb & 0x80) != 0,
-            en_otg_iin_ocp: (msb & 0x01) != 0,
-            en_otg_ichg_ocp: (msb & 0x02) != 0,
-            en_otg_cmpin_ocp: (msb & 0x04) != 0,
-            en_otg_vbus_ocp: (msb & 0x08) != 0,
-            en_otg_vsys_ocp: (msb & 0x10) != 0,
-            en_otg_vbat_ocp: (msb & 0x20) != 0,
-            en_otg_iin_ucp: (msb & 0x40) != 0,
-            en_otg_ichg_ucp: (msb & 0x80) != 0,
+            en_ibat: (msb & 0x80) != 0,
+            en_prochot_lpwr: (msb & 0x40) != 0,
+            psys_config: (msb >> 4) & 0x03,
+            rsns_rac: (msb & 0x08) != 0,
+            rsns_rsr: (msb & 0x04) != 0,
+            psys_ratio: (msb & 0x02) != 0,
+            cmp_ref: (lsb & 0x80) != 0,
+            cmp_pol: (lsb & 0x40) != 0,
+            cmp_deg: (lsb >> 4) & 0x03,
+            force_conv_off: (lsb & 0x08) != 0,
+            en_ptm: (lsb & 0x04) != 0,
+            en_ship_dchg: (lsb & 0x02) != 0,
+            auto_wakeup_en: (lsb & 0x01) != 0,
         }
     }
 
@@ -698,53 +696,40 @@ impl ChargeOption1 {
         let mut lsb: u8 = 0;
         let mut msb: u8 = 0;
 
-        if self.en_ship_dchg {
-            lsb |= 0x01;
+        if self.en_ibat {
+            msb |= 0x80;
         }
-        if self.en_hiz {
-            lsb |= 0x02;
-        }
-        if self.en_chrg_pump {
-            lsb |= 0x04;
-        }
-        if self.en_otg_pmp {
-            lsb |= 0x08;
-        }
-        if self.en_otg_vsys_uvp {
-            lsb |= 0x10;
-        }
-        if self.en_otg_vsys_ovp {
-            lsb |= 0x20;
-        }
-        if self.en_otg_vbat_uvp {
-            lsb |= 0x40;
-        }
-        if self.en_otg_vbat_ovp {
-            lsb |= 0x80;
-        }
-        if self.en_otg_iin_ocp {
-            msb |= 0x01;
-        }
-        if self.en_otg_ichg_ocp {
-            msb |= 0x02;
-        }
-        if self.en_otg_cmpin_ocp {
-            msb |= 0x04;
-        }
-        if self.en_otg_vbus_ocp {
-            msb |= 0x08;
-        }
-        if self.en_otg_vsys_ocp {
-            msb |= 0x10;
-        }
-        if self.en_otg_vbat_ocp {
-            msb |= 0x20;
-        }
-        if self.en_otg_iin_ucp {
+        if self.en_prochot_lpwr {
             msb |= 0x40;
         }
-        if self.en_otg_ichg_ucp {
-            msb |= 0x80;
+        msb |= (self.psys_config & 0x03) << 4;
+        if self.rsns_rac {
+            msb |= 0x08;
+        }
+        if self.rsns_rsr {
+            msb |= 0x04;
+        }
+        if self.psys_ratio {
+            msb |= 0x02;
+        }
+        if self.cmp_ref {
+            lsb |= 0x80;
+        }
+        if self.cmp_pol {
+            lsb |= 0x40;
+        }
+        lsb |= (self.cmp_deg & 0x03) << 4;
+        if self.force_conv_off {
+            lsb |= 0x08;
+        }
+        if self.en_ptm {
+            lsb |= 0x04;
+        }
+        if self.en_ship_dchg {
+            lsb |= 0x02;
+        }
+        if self.auto_wakeup_en {
+            lsb |= 0x01;
         }
         (lsb, msb)
     }
@@ -754,44 +739,40 @@ impl ChargeOption1 {
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub struct ChargeOption2 {
-    pub en_learn: bool,
-    pub en_otg_uvlo: bool,
-    pub en_otg_ovlo: bool,
-    pub en_otg_ocp: bool,
-    pub en_otg_ucp: bool,
-    pub en_otg_vsys_uvp: bool,
-    pub en_otg_vsys_ovp: bool,
-    pub en_otg_vbat_uvp: bool,
-    pub en_otg_vbat_ovp: bool,
-    pub en_otg_iin_ocp: bool,
-    pub en_otg_ichg_ocp: bool,
-    pub en_otg_cmpin_ocp: bool,
-    pub en_otg_vbus_ocp: bool,
-    pub en_otg_vsys_ocp: bool,
-    pub en_otg_vbat_ocp: bool,
-    pub en_otg_iin_ucp: bool,
+    pub pkpwr_tovld_deg: u8, // 00b: 1ms, 01b: 2ms, 10b: 5ms, 11b: 10ms
+    pub en_pkpwr_iin_dpm: bool,
+    pub en_pkpwr_vsys: bool,
+    pub stat_pkpwr_ovld: bool,
+    pub stat_pkpwr_relax: bool,
+    pub pkpwr_tmax: u8, // 00b: 20ms, 01b: 40ms, 10b: 80ms, 11b: 1s
+    pub en_extilim: bool,
+    pub en_ichg_idchg: bool,
+    pub q2_ocp: bool,  // 0b: 210mV, 1b: 150mV
+    pub acx_ocp: bool, // 0b: 280mV/200mV, 1b: 150mV/100mV
+    pub en_acoc: bool,
+    pub acoc_vth: bool, // 0b: 133%, 1b: 200%
+    pub en_batoc: bool,
+    pub batoc_vth: bool, // 0b: 133%, 1b: 200%
 }
 
 impl ChargeOption2 {
     /// Creates a new ChargeOption2 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_learn: (lsb & 0x01) != 0,
-            en_otg_uvlo: (lsb & 0x02) != 0,
-            en_otg_ovlo: (lsb & 0x04) != 0,
-            en_otg_ocp: (lsb & 0x08) != 0,
-            en_otg_ucp: (lsb & 0x10) != 0,
-            en_otg_vsys_uvp: (lsb & 0x20) != 0,
-            en_otg_vsys_ovp: (lsb & 0x40) != 0,
-            en_otg_vbat_uvp: (lsb & 0x80) != 0,
-            en_otg_vbat_ovp: (msb & 0x01) != 0,
-            en_otg_iin_ocp: (msb & 0x02) != 0,
-            en_otg_ichg_ocp: (msb & 0x04) != 0,
-            en_otg_cmpin_ocp: (msb & 0x08) != 0,
-            en_otg_vbus_ocp: (msb & 0x10) != 0,
-            en_otg_vsys_ocp: (msb & 0x20) != 0,
-            en_otg_vbat_ocp: (msb & 0x40) != 0,
-            en_otg_iin_ucp: (msb & 0x80) != 0,
+            pkpwr_tovld_deg: (msb >> 6) & 0x03,
+            en_pkpwr_iin_dpm: (msb & 0x20) != 0,
+            en_pkpwr_vsys: (msb & 0x10) != 0,
+            stat_pkpwr_ovld: (msb & 0x08) != 0,
+            stat_pkpwr_relax: (msb & 0x04) != 0,
+            pkpwr_tmax: msb & 0x03,
+            en_extilim: (lsb & 0x80) != 0,
+            en_ichg_idchg: (lsb & 0x40) != 0,
+            q2_ocp: (lsb & 0x20) != 0,
+            acx_ocp: (lsb & 0x10) != 0,
+            en_acoc: (lsb & 0x08) != 0,
+            acoc_vth: (lsb & 0x04) != 0,
+            en_batoc: (lsb & 0x02) != 0,
+            batoc_vth: (lsb & 0x01) != 0,
         }
     }
 
@@ -800,53 +781,43 @@ impl ChargeOption2 {
         let mut lsb: u8 = 0;
         let mut msb: u8 = 0;
 
-        if self.en_learn {
-            lsb |= 0x01;
-        }
-        if self.en_otg_uvlo {
-            lsb |= 0x02;
-        }
-        if self.en_otg_ovlo {
-            lsb |= 0x04;
-        }
-        if self.en_otg_ocp {
-            lsb |= 0x08;
-        }
-        if self.en_otg_ucp {
-            lsb |= 0x10;
-        }
-        if self.en_otg_vsys_uvp {
-            lsb |= 0x20;
-        }
-        if self.en_otg_vsys_ovp {
-            lsb |= 0x40;
-        }
-        if self.en_otg_vbat_uvp {
-            lsb |= 0x80;
-        }
-        if self.en_otg_vbat_ovp {
-            msb |= 0x01;
-        }
-        if self.en_otg_iin_ocp {
-            msb |= 0x02;
-        }
-        if self.en_otg_ichg_ocp {
-            msb |= 0x04;
-        }
-        if self.en_otg_cmpin_ocp {
-            msb |= 0x08;
-        }
-        if self.en_otg_vbus_ocp {
-            msb |= 0x10;
-        }
-        if self.en_otg_vsys_ocp {
+        msb |= (self.pkpwr_tovld_deg & 0x03) << 6;
+        if self.en_pkpwr_iin_dpm {
             msb |= 0x20;
         }
-        if self.en_otg_vbat_ocp {
-            msb |= 0x40;
+        if self.en_pkpwr_vsys {
+            msb |= 0x10;
         }
-        if self.en_otg_iin_ucp {
-            msb |= 0x80;
+        if self.stat_pkpwr_ovld {
+            msb |= 0x08;
+        }
+        if self.stat_pkpwr_relax {
+            msb |= 0x04;
+        }
+        msb |= self.pkpwr_tmax & 0x03;
+        if self.en_extilim {
+            lsb |= 0x80;
+        }
+        if self.en_ichg_idchg {
+            lsb |= 0x40;
+        }
+        if self.q2_ocp {
+            lsb |= 0x20;
+        }
+        if self.acx_ocp {
+            lsb |= 0x10;
+        }
+        if self.en_acoc {
+            lsb |= 0x08;
+        }
+        if self.acoc_vth {
+            lsb |= 0x04;
+        }
+        if self.en_batoc {
+            lsb |= 0x02;
+        }
+        if self.batoc_vth {
+            lsb |= 0x01;
         }
         (lsb, msb)
     }
@@ -856,44 +827,42 @@ impl ChargeOption2 {
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub struct ChargeOption3 {
-    pub en_learn: bool,
-    pub en_otg_uvlo: bool,
-    pub en_otg_ovlo: bool,
-    pub en_otg_ocp: bool,
-    pub en_otg_ucp: bool,
-    pub en_otg_vsys_uvp: bool,
-    pub en_otg_vsys_ovp: bool,
-    pub en_otg_vbat_uvp: bool,
-    pub en_otg_vbat_ovp: bool,
-    pub en_otg_iin_ocp: bool,
-    pub en_otg_ichg_ocp: bool,
-    pub en_otg_cmpin_ocp: bool,
-    pub en_otg_vbus_ocp: bool,
-    pub en_otg_vsys_ocp: bool,
-    pub en_otg_vbat_ocp: bool,
-    pub en_otg_iin_ucp: bool,
+    pub en_hiz: bool,
+    pub reset_reg: bool,
+    pub reset_vindpm: bool,
+    pub en_otg: bool,
+    pub en_ico_mode: bool,
+    pub en_port_ctrl: bool,
+    pub en_vsys_min_soft_sr: bool,
+    pub en_otg_bigcap: bool,
+    pub batfet_enz: bool,
+    pub en_vbus_vap: bool,
+    pub otg_vap_mode: bool, // 0b: EN/DIS VAP, 1b: EN/DIS OTG
+    pub il_avg: u8,         // 00b: 6A, 01b: 10A, 10b: 15A, 11b: Disabled
+    pub cmp_en: bool,
+    pub batfetoff_hiz: bool,
+    pub psys_otg_idchg: bool,
 }
 
 impl ChargeOption3 {
     /// Creates a new ChargeOption3 from raw LSB and MSB register values.
     pub fn from_register_value(lsb: u8, msb: u8) -> Self {
         Self {
-            en_learn: (lsb & 0x01) != 0,
-            en_otg_uvlo: (lsb & 0x02) != 0,
-            en_otg_ovlo: (lsb & 0x04) != 0,
-            en_otg_ocp: (lsb & 0x08) != 0,
-            en_otg_ucp: (lsb & 0x10) != 0,
-            en_otg_vsys_uvp: (lsb & 0x20) != 0,
-            en_otg_vsys_ovp: (lsb & 0x40) != 0,
-            en_otg_vbat_uvp: (lsb & 0x80) != 0,
-            en_otg_vbat_ovp: (msb & 0x01) != 0,
-            en_otg_iin_ocp: (msb & 0x02) != 0,
-            en_otg_ichg_ocp: (msb & 0x04) != 0,
-            en_otg_cmpin_ocp: (msb & 0x08) != 0,
-            en_otg_vbus_ocp: (msb & 0x10) != 0,
-            en_otg_vsys_ocp: (msb & 0x20) != 0,
-            en_otg_vbat_ocp: (msb & 0x40) != 0,
-            en_otg_iin_ucp: (msb & 0x80) != 0,
+            en_hiz: (msb & 0x80) != 0,
+            reset_reg: (msb & 0x40) != 0,
+            reset_vindpm: (msb & 0x20) != 0,
+            en_otg: (msb & 0x10) != 0,
+            en_ico_mode: (msb & 0x08) != 0,
+            en_port_ctrl: (msb & 0x04) != 0,
+            en_vsys_min_soft_sr: (msb & 0x02) != 0,
+            en_otg_bigcap: (msb & 0x01) != 0,
+            batfet_enz: (lsb & 0x80) != 0,
+            en_vbus_vap: (lsb & 0x40) != 0,
+            otg_vap_mode: (lsb & 0x20) != 0,
+            il_avg: (lsb >> 3) & 0x03,
+            cmp_en: (lsb & 0x04) != 0,
+            batfetoff_hiz: (lsb & 0x02) != 0,
+            psys_otg_idchg: (lsb & 0x01) != 0,
         }
     }
 
@@ -902,53 +871,48 @@ impl ChargeOption3 {
         let mut lsb: u8 = 0;
         let mut msb: u8 = 0;
 
-        if self.en_learn {
-            lsb |= 0x01;
+        if self.en_hiz {
+            msb |= 0x80;
         }
-        if self.en_otg_uvlo {
-            lsb |= 0x02;
-        }
-        if self.en_otg_ovlo {
-            lsb |= 0x04;
-        }
-        if self.en_otg_ocp {
-            lsb |= 0x08;
-        }
-        if self.en_otg_ucp {
-            lsb |= 0x10;
-        }
-        if self.en_otg_vsys_uvp {
-            lsb |= 0x20;
-        }
-        if self.en_otg_vsys_ovp {
-            lsb |= 0x40;
-        }
-        if self.en_otg_vbat_uvp {
-            lsb |= 0x80;
-        }
-        if self.en_otg_vbat_ovp {
-            msb |= 0x01;
-        }
-        if self.en_otg_iin_ocp {
-            msb |= 0x02;
-        }
-        if self.en_otg_ichg_ocp {
-            msb |= 0x04;
-        }
-        if self.en_otg_cmpin_ocp {
-            msb |= 0x08;
-        }
-        if self.en_otg_vbus_ocp {
-            msb |= 0x10;
-        }
-        if self.en_otg_vsys_ocp {
-            msb |= 0x20;
-        }
-        if self.en_otg_vbat_ocp {
+        if self.reset_reg {
             msb |= 0x40;
         }
-        if self.en_otg_iin_ucp {
-            msb |= 0x80;
+        if self.reset_vindpm {
+            msb |= 0x20;
+        }
+        if self.en_otg {
+            msb |= 0x10;
+        }
+        if self.en_ico_mode {
+            msb |= 0x08;
+        }
+        if self.en_port_ctrl {
+            msb |= 0x04;
+        }
+        if self.en_vsys_min_soft_sr {
+            msb |= 0x02;
+        }
+        if self.en_otg_bigcap {
+            msb |= 0x01;
+        }
+        if self.batfet_enz {
+            lsb |= 0x80;
+        }
+        if self.en_vbus_vap {
+            lsb |= 0x40;
+        }
+        if self.otg_vap_mode {
+            lsb |= 0x20;
+        }
+        lsb |= (self.il_avg & 0x03) << 3;
+        if self.cmp_en {
+            lsb |= 0x04;
+        }
+        if self.batfetoff_hiz {
+            lsb |= 0x02;
+        }
+        if self.psys_otg_idchg {
+            lsb |= 0x01;
         }
         (lsb, msb)
     }

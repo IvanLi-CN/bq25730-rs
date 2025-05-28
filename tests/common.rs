@@ -3,7 +3,8 @@ pub fn new_bq25730_with_mock(
     expectations: &[embedded_hal_mock::eh1::i2c::Transaction],
 ) -> bq25730_async_rs::Bq25730<embedded_hal_mock::eh1::i2c::Mock> {
     let i2c = embedded_hal_mock::eh1::i2c::Mock::new(expectations);
-    bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS)
+    bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4)
+    // 默认电池节数 4
 }
 
 /// Helper function to create a mock transaction for writing a single register.

@@ -11,3 +11,9 @@ pre-commit:
     test:
       glob: "*.{rs}"
       run: cargo test
+    check-example-stm32g4:
+      glob: "*.{rs}"
+      run: cd examples/stm32g4 && cargo check
+    check-example-stm32g0:
+      glob: "*.{rs}"
+      run: cd examples/stm32g0 && cargo check
