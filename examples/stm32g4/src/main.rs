@@ -61,17 +61,11 @@ async fn main(_spawner: Spawner) {
     // ChargeOption1 MSB (0x31) 默认值 0x3F (0b00111111)
     // RSNS_RAC (bit 3) = 0, RSNS_RSR (bit 2) = 1
     // 0b00111111 & ~(1 << 3) | (1 << 2) = 0b00110111 (0x37)
-    let charge_option1_msb: u8 = 0x37;
-    let charge_option1_lsb: u8 = 0x00; // LSB 保持默认
-    if let Err(e) = bq
-        .set_charge_option1(
-            bq25730_async_rs::data_types::ChargeOption1::from_register_value(
-                charge_option1_lsb,
-                charge_option1_msb,
-            ),
-        )
-        .await
-    {
+    let charge_option1 = bq25730_async_rs::data_types::ChargeOption1 {
+        msb_flags: bq25730_async_rs::registers::ChargeOption1MsbFlags::from_bits_truncate(0x37),
+        lsb_flags: bq25730_async_rs::registers::ChargeOption1Flags::empty(),
+    };
+    if let Err(e) = bq.set_charge_option1(charge_option1).await {
         error!("Failed to set charge option 1: {:?}", e);
     } else {
         info!("Charge option 1 set for sense resistors.");
@@ -81,17 +75,11 @@ async fn main(_spawner: Spawner) {
     // ChargeOption0 MSB (0x01) 默认值 0xE7 (0b11100111)
     // EN_LWPWR (bit 7) = 0
     // WDTMR_ADJ (bit 6:5) = 00b (禁用看门狗定时器)
-    let charge_option0_msb: u8 = 0x27; // 0b00100111 (EN_LWPWR=0, WDTMR_ADJ=00, 其他保持默认)
-    let charge_option0_lsb: u8 = 0x0E; // 0b00001110 (保持 IBAT_GAIN, EN_LDO, EN_IIN_DPM 默认启用)
-    if let Err(e) = bq
-        .set_charge_option0(
-            bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-                charge_option0_lsb,
-                charge_option0_msb,
-            ),
-        )
-        .await
-    {
+    let charge_option0 = bq25730_async_rs::data_types::ChargeOption0 {
+        msb_flags: bq25730_async_rs::registers::ChargeOption0MsbFlags::from_bits_truncate(0x27), // 0b00100111 (EN_LWPWR=0, WDTMR_ADJ=00, 其他保持默认)
+        lsb_flags: bq25730_async_rs::registers::ChargeOption0Flags::from_bits_truncate(0x0E), // 0b00001110 (保持 IBAT_GAIN, EN_LDO, EN_IIN_DPM 默认启用)
+    };
+    if let Err(e) = bq.set_charge_option0(charge_option0).await {
         error!("Failed to set charge option 0: {:?}", e);
     } else {
         info!("Charge option 0 set for performance mode and watchdog disabled.");
@@ -136,17 +124,17 @@ async fn main(_spawner: Spawner) {
     // 3. 配置并启用 ADC 进行连续转换
     info!("--- Configuring and Enabling ADC ---");
     let adc_option = bq25730_async_rs::data_types::AdcOption {
-        adc_conv: true,      // 连续转换
-        adc_start: true,     // 启动转换
-        adc_fullscale: true, // 3.06V 满量程
-        en_adc_cmpin: true,  // 启用所有通道
-        en_adc_vbus: true,
-        en_adc_psys: true,
-        en_adc_iin: true,
-        en_adc_idchg: true,
-        en_adc_ichg: true,
-        en_adc_vsys: true,
-        en_adc_vbat: true,
+        msb_flags: bq25730_async_rs::registers::AdcOptionMsbFlags::ADC_CONV
+            | bq25730_async_rs::registers::AdcOptionMsbFlags::ADC_START
+            | bq25730_async_rs::registers::AdcOptionMsbFlags::ADC_FULLSCALE,
+        lsb_flags: bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_CMPIN
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_VBUS
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_PSYS
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_IIN
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_IDCHG
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_ICHG
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_VSYS
+            | bq25730_async_rs::registers::AdcOptionFlags::EN_ADC_VBAT,
     };
 
     if let Err(e) = bq.set_adc_option(adc_option).await {
@@ -170,12 +158,42 @@ async fn main(_spawner: Spawner) {
         match bq.read_charger_status().await {
             Ok(status) => {
                 info!("Charger Status:");
-                info!("  STAT_AC: {}", status.stat_ac);
-                info!("  IN_OTG: {}", status.in_otg);
-                info!("  IN_VAP: {}", status.in_vap);
-                info!("  IN_FCHRG: {}", status.in_fchrg);
-                info!("  IN_PCHRG: {}", status.in_pchrg);
-                info!("  Fault VSYS_UVP: {}", status.fault_vsys_uvp);
+                info!(
+                    "  STAT_AC: {}",
+                    status
+                        .status_flags
+                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::STAT_AC)
+                );
+                info!(
+                    "  IN_OTG: {}",
+                    status
+                        .status_flags
+                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_OTG)
+                );
+                info!(
+                    "  IN_VAP: {}",
+                    status
+                        .status_flags
+                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_VAP)
+                );
+                info!(
+                    "  IN_FCHRG: {}",
+                    status
+                        .status_flags
+                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_FCHRG)
+                );
+                info!(
+                    "  IN_PCHRG: {}",
+                    status
+                        .status_flags
+                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_PCHRG)
+                );
+                info!(
+                    "  Fault VSYS_UVP: {}",
+                    status.fault_flags.contains(
+                        bq25730_async_rs::registers::ChargerStatusFaultFlags::FAULT_VSYS_UVP
+                    )
+                );
             }
             Err(e) => {
                 error!("Failed to read Charger Status: {:?}", e);
@@ -207,7 +225,7 @@ async fn main(_spawner: Spawner) {
                 info!("  ICHG: {} mA", adc_measurements.ichg.0);
                 info!("  IDCHG: {} mA", adc_measurements.idchg.0);
                 info!("  CMPIN: {} mV", adc_measurements.cmpin.0);
-                info!("  IIN: {} mA", adc_measurements.iin.0);
+                info!("  IIN: {} mA", adc_measurements.iin.milliamps);
                 info!("  VBAT: {} mV", adc_measurements.vbat.0);
                 info!("  PSYS: {} mW", adc_measurements.psys.0);
             }

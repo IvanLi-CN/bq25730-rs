@@ -19,6 +19,12 @@ fn test_new() {
 #[test]
 fn test_init() -> Result<(), Error<ErrorKind>> {
     let expectations = [
+        // Read ChargeOption1 to determine RSNS_RAC setting (added for init)
+        read_registers_transaction(
+            BQ25730_I2C_ADDRESS,
+            Register::ChargeOption1,
+            &[0x00, 0x00], // Mocked value: LSB 0x00, MSB 0x00 (RSNS_RAC = 0)
+        ),
         // Read ChargeOption0 to preserve other settings
         read_registers_transaction(
             BQ25730_I2C_ADDRESS,
@@ -32,16 +38,16 @@ fn test_init() -> Result<(), Error<ErrorKind>> {
             &[0x0E | 0x02, 0xE7], // LSB with EN_IIN_DPM (bit 1) set
         ),
         // Set IIN_HOST: 3200mA (raw = 31)
-        write_register_transaction(BQ25730_I2C_ADDRESS, Register::IinHost, 31),
+        write_registers_transaction(BQ25730_I2C_ADDRESS, Register::IinHost, &[00, 31]),
         // Set VSYS_MIN: 3500mV (raw = 35)
-        write_register_transaction(BQ25730_I2C_ADDRESS, Register::VsysMin, 35),
+        write_registers_transaction(BQ25730_I2C_ADDRESS, Register::VsysMin, &[00, 35]),
         // Read current ChargerStatus LSB (0x20)
-        read_register_transaction(BQ25730_I2C_ADDRESS, Register::ChargerStatus, 0xFF), // Assume initial state is all flags set
+        read_registers_transaction(BQ25730_I2C_ADDRESS, Register::ChargerStatus, &[0xFF, 0xFF]), // Assume initial state is all flags set
         // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3) by writing 0
-        write_register_transaction(
+        write_registers_transaction(
             BQ25730_I2C_ADDRESS,
             Register::ChargerStatus,
-            0xFF & !(0x10 | 0x08), // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3)
+            &[0xE7, 0xFF], // Clear Fault SYSOVP (bit 4) and Fault VSYS_UVP (bit 3)
         ),
     ];
 

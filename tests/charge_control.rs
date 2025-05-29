@@ -39,20 +39,29 @@ fn test_charge_control_set_charge_current(
 fn test_charge_control_read_charge_current(
 ) -> Result<(), bq25730_async_rs::errors::Error<embedded_hal::i2c::ErrorKind>> {
     let expectations = [
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeCurrent,
-            &[0x00, 0x00],
+            vec![bq25730_async_rs::registers::Register::ChargeCurrent as u8],
+            bq25730_async_rs::data_types::ChargeCurrent(0)
+                .to_u16()
+                .to_le_bytes()
+                .to_vec(),
         ), // 0mA
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeCurrent,
-            &[0x00, 0x10],
+            vec![bq25730_async_rs::registers::Register::ChargeCurrent as u8],
+            bq25730_async_rs::data_types::ChargeCurrent(8192)
+                .to_u16()
+                .to_le_bytes()
+                .to_vec(),
         ), // 8192mA
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeCurrent,
-            &[0x00, 0x05],
+            vec![bq25730_async_rs::registers::Register::ChargeCurrent as u8],
+            bq25730_async_rs::data_types::ChargeCurrent(2560)
+                .to_u16()
+                .to_le_bytes()
+                .to_vec(),
         ), // 2560mA
     ];
     let mut charger = new_bq25730_with_mock(&expectations);
@@ -99,7 +108,10 @@ fn test_charge_control_read_charge_voltage(
         embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
             vec![Register::ChargeVoltage as u8],
-            vec![0x00, 0x04],
+            bq25730_async_rs::data_types::ChargeVoltage(1024)
+                .to_u16()
+                .to_le_bytes()
+                .to_vec(),
         ), // 1024mV (raw = 128)
     ];
     let mut charger = new_bq25730_with_mock(&expectations);
@@ -126,51 +138,56 @@ fn test_charge_control_set_charge_option0(
         write_registers_transaction(
             BQ25730_I2C_ADDRESS,
             bq25730_async_rs::registers::Register::ChargeOption0,
-            &[
-                bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-                0x00,
-            ],
+            {
+                let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                    bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16,
+                );
+                let (lsb, msb) = option.to_msb_lsb_bytes();
+                &[lsb, msb]
+            },
         ), // LSB, MSB (EN_CMP_LATCH)
         write_registers_transaction(
             BQ25730_I2C_ADDRESS,
             bq25730_async_rs::registers::Register::ChargeOption0,
-            &[
-                0x00,
-                bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
-            ],
+            {
+                let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                    (bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16)
+                        << 8,
+                );
+                let (lsb, msb) = option.to_msb_lsb_bytes();
+                &[lsb, msb]
+            },
         ), // LSB, MSB (EN_LWPWR)
         write_registers_transaction(
             BQ25730_I2C_ADDRESS,
             bq25730_async_rs::registers::Register::ChargeOption0,
-            &[
-                bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-                bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
-            ],
+            {
+                let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                    (bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16)
+                        | ((bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits()
+                            as u16)
+                            << 8),
+                );
+                let (lsb, msb) = option.to_msb_lsb_bytes();
+                &[lsb, msb]
+            },
         ), // LSB, MSB (EN_CMP_LATCH | EN_LWPWR)
     ];
     let mut charger = new_bq25730_with_mock(&expectations);
 
-    charger.set_charge_option0(
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(0x00, 0x00),
-    )?; // LSB, MSB
-    charger.set_charge_option0(
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-            bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-            0x00,
-        ),
-    )?; // LSB, MSB (EN_CMP_LATCH)
-    charger.set_charge_option0(
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-            0x00,
-            bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
-        ),
-    )?; // LSB, MSB (EN_LWPWR)
-    charger.set_charge_option0(
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-            bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-            bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
-        ),
-    )?; // LSB, MSB (EN_CMP_LATCH | EN_LWPWR)
+    charger.set_charge_option0(bq25730_async_rs::data_types::ChargeOption0::from_u16(
+        0x0000,
+    ))?; // LSB, MSB
+    charger.set_charge_option0(bq25730_async_rs::data_types::ChargeOption0::from_u16(
+        bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16,
+    ))?; // LSB, MSB (EN_CMP_LATCH)
+    charger.set_charge_option0(bq25730_async_rs::data_types::ChargeOption0::from_u16(
+        (bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16) << 8,
+    ))?; // LSB, MSB (EN_LWPWR)
+    charger.set_charge_option0(bq25730_async_rs::data_types::ChargeOption0::from_u16(
+        (bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16)
+            | ((bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16) << 8),
+    ))?; // LSB, MSB (EN_CMP_LATCH | EN_LWPWR)
 
     charger.i2c.done();
     Ok(())
@@ -180,61 +197,72 @@ fn test_charge_control_set_charge_option0(
 fn test_charge_control_read_charge_option0(
 ) -> Result<(), bq25730_async_rs::errors::Error<embedded_hal::i2c::ErrorKind>> {
     let expectations = [
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            &[0x00, 0x00],
+            vec![bq25730_async_rs::registers::Register::ChargeOption0 as u8],
+            bq25730_async_rs::data_types::ChargeOption0::from_u16(0x0000)
+                .to_u16()
+                .to_le_bytes()
+                .to_vec(),
         ), // LSB, MSB
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            &[
-                bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-                0x00,
-            ],
+            vec![bq25730_async_rs::registers::Register::ChargeOption0 as u8],
+            bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16,
+            )
+            .to_u16()
+            .to_le_bytes()
+            .to_vec(),
         ), // LSB, MSB
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            &[
-                0x00,
-                bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
-            ],
+            vec![bq25730_async_rs::registers::Register::ChargeOption0 as u8],
+            bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                (bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16) << 8,
+            )
+            .to_u16()
+            .to_le_bytes()
+            .to_vec(),
         ), // LSB, MSB
-        read_registers_transaction(
+        embedded_hal_mock::eh1::i2c::Transaction::write_read(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            &[
-                bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-                bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
-            ],
+            vec![bq25730_async_rs::registers::Register::ChargeOption0 as u8],
+            bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                (bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16)
+                    | ((bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits()
+                        as u16)
+                        << 8),
+            )
+            .to_u16()
+            .to_le_bytes()
+            .to_vec(),
         ), // LSB, MSB
     ];
     let mut charger = new_bq25730_with_mock(&expectations);
 
     assert_eq!(
         charger.read_charge_option0()?,
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(0x00, 0x00)
+        bq25730_async_rs::data_types::ChargeOption0::from_u16(0x0000)
     ); // LSB, MSB
     assert_eq!(
         charger.read_charge_option0()?,
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-            bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-            0x00,
+        bq25730_async_rs::data_types::ChargeOption0::from_u16(
+            bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16
         )
     ); // LSB, MSB
     assert_eq!(
         charger.read_charge_option0()?,
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-            0x00,
-            bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
+        bq25730_async_rs::data_types::ChargeOption0::from_u16(
+            (bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16) << 8
         )
     ); // LSB, MSB
     assert_eq!(
         charger.read_charge_option0()?,
-        bq25730_async_rs::data_types::ChargeOption0::from_register_value(
-            bq25730_async_rs::registers::CHARGE_OPTION0_EN_CMP_LATCH,
-            bq25730_async_rs::registers::CHARGE_OPTION0_MSB_EN_LWPWR,
+        bq25730_async_rs::data_types::ChargeOption0::from_u16(
+            (bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16)
+                | ((bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16)
+                    << 8)
         )
     ); // LSB, MSB
 
