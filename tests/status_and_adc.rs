@@ -1,6 +1,6 @@
 #![allow(clippy::approx_constant)]
 
-include!("common.rs");
+use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
 
 use bq25730_async_rs::errors::Error;
 use bq25730_async_rs::registers::Register;
@@ -9,12 +9,13 @@ use embedded_hal::i2c::ErrorKind;
 
 #[test]
 fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::ChargerStatus,
-        &[0x80, 0x80], // LSB: Fault ACOV, MSB: STAT_AC
+        vec![Register::ChargerStatus as u8],
+        vec![0x80, 0x80], // LSB: Fault ACOV, MSB: STAT_AC
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let status = charger.read_charger_status()?;
     assert!(status
         .status_flags
@@ -24,12 +25,13 @@ fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
         .contains(bq25730_async_rs::registers::ChargerStatusFaultFlags::FAULT_ACOV));
     charger.i2c.done();
 
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::ChargerStatus,
-        &[0x00, 0x00], // All false
+        vec![Register::ChargerStatus as u8],
+        vec![0x00, 0x00], // All false
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let status = charger.read_charger_status()?;
     assert!(!status
         .status_flags
@@ -86,12 +88,13 @@ fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::ProchotStatus,
-        &[0x01, 0x40], // LSB: STAT_ADPT_REMOVAL, MSB: EN_PROCHOT_EXT
+        vec![Register::ProchotStatus as u8],
+        vec![0x01, 0x40], // LSB: STAT_ADPT_REMOVAL, MSB: EN_PROCHOT_EXT
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let status = charger.read_prochot_status()?;
     assert!(status
         .msb_flags
@@ -102,12 +105,13 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
     // assert_eq!(status.stat_idchg2, true); // Removed as ChargeOption4 is gone
     charger.i2c.done();
 
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::ProchotStatus,
-        &[0x00, 0x00], // All false
+        vec![Register::ProchotStatus as u8],
+        vec![0x00, 0x00], // All false
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let status = charger.read_prochot_status()?;
     assert!(!status
         .msb_flags
@@ -197,7 +201,8 @@ fn test_read_adc_measurements() -> Result<(), Error<ErrorKind>> {
             vec![0x00, 0x01],
         ), // 64mV (raw = 1)
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let measurements = charger.read_adc_measurements()?;
     assert_eq!(measurements.psys.0, 12); // PSYS is in mV, 12mV/LSB
     assert_eq!(measurements.vbus.0, 96);

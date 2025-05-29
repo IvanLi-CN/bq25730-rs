@@ -2,30 +2,40 @@
 
 use bq25730_async_rs::{registers::Register, BQ25730_I2C_ADDRESS};
 
-include!("common.rs");
+use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
 
 // ChargeCurrent (03/02h)
 #[test]
 fn test_charge_control_set_charge_current(
 ) -> Result<(), bq25730_async_rs::errors::Error<embedded_hal::i2c::ErrorKind>> {
     let expectations = [
-        write_registers_transaction(
+        I2cTransaction::write(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeCurrent,
-            &[0x00, 0x00],
+            vec![
+                bq25730_async_rs::registers::Register::ChargeCurrent as u8,
+                0x00,
+                0x00,
+            ],
         ), // 0mA
-        write_registers_transaction(
+        I2cTransaction::write(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeCurrent,
-            &[0x00, 0x10],
+            vec![
+                bq25730_async_rs::registers::Register::ChargeCurrent as u8,
+                0x00,
+                0x10,
+            ],
         ), // 8192mA
-        write_registers_transaction(
+        I2cTransaction::write(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeCurrent,
-            &[0x00, 0x05],
+            vec![
+                bq25730_async_rs::registers::Register::ChargeCurrent as u8,
+                0x00,
+                0x05,
+            ],
         ), // 2560mA
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
 
     charger.set_charge_current(bq25730_async_rs::data_types::ChargeCurrent(0))?;
     charger.set_charge_current(bq25730_async_rs::data_types::ChargeCurrent(8192))?;
@@ -64,7 +74,8 @@ fn test_charge_control_read_charge_current(
                 .to_vec(),
         ), // 2560mA
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
 
     assert_eq!(
         charger.read_charge_current()?,
@@ -93,7 +104,8 @@ fn test_charge_control_set_charge_voltage(
             vec![Register::ChargeVoltage as u8, 0x00, 0x04],
         ), // 1024mV (raw = 128)
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
 
     charger.set_charge_voltage(bq25730_async_rs::data_types::ChargeVoltage(1024))?; // Min voltage is 1024mV
 
@@ -114,7 +126,8 @@ fn test_charge_control_read_charge_voltage(
                 .to_vec(),
         ), // 1024mV (raw = 128)
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
 
     assert_eq!(
         charger.read_charge_voltage()?,
@@ -130,50 +143,53 @@ fn test_charge_control_read_charge_voltage(
 fn test_charge_control_set_charge_option0(
 ) -> Result<(), bq25730_async_rs::errors::Error<embedded_hal::i2c::ErrorKind>> {
     let expectations = [
-        write_registers_transaction(
+        I2cTransaction::write(
             BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            &[0x00, 0x00],
+            vec![
+                bq25730_async_rs::registers::Register::ChargeOption0 as u8,
+                0x00,
+                0x00,
+            ],
         ), // LSB, MSB
-        write_registers_transaction(
-            BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            {
-                let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
-                    bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16,
-                );
-                let (lsb, msb) = option.to_msb_lsb_bytes();
-                &[lsb, msb]
-            },
-        ), // LSB, MSB (EN_CMP_LATCH)
-        write_registers_transaction(
-            BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            {
-                let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
-                    (bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16)
-                        << 8,
-                );
-                let (lsb, msb) = option.to_msb_lsb_bytes();
-                &[lsb, msb]
-            },
-        ), // LSB, MSB (EN_LWPWR)
-        write_registers_transaction(
-            BQ25730_I2C_ADDRESS,
-            bq25730_async_rs::registers::Register::ChargeOption0,
-            {
-                let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
-                    (bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16)
-                        | ((bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits()
-                            as u16)
-                            << 8),
-                );
-                let (lsb, msb) = option.to_msb_lsb_bytes();
-                &[lsb, msb]
-            },
-        ), // LSB, MSB (EN_CMP_LATCH | EN_LWPWR)
+        I2cTransaction::write(BQ25730_I2C_ADDRESS, {
+            let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16,
+            );
+            let (lsb, msb) = option.to_msb_lsb_bytes();
+            vec![
+                bq25730_async_rs::registers::Register::ChargeOption0 as u8,
+                lsb,
+                msb,
+            ]
+        }), // LSB, MSB (EN_CMP_LATCH)
+        I2cTransaction::write(BQ25730_I2C_ADDRESS, {
+            let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                (bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits() as u16) << 8,
+            );
+            let (lsb, msb) = option.to_msb_lsb_bytes();
+            vec![
+                bq25730_async_rs::registers::Register::ChargeOption0 as u8,
+                lsb,
+                msb,
+            ]
+        }), // LSB, MSB (EN_LWPWR)
+        I2cTransaction::write(BQ25730_I2C_ADDRESS, {
+            let option = bq25730_async_rs::data_types::ChargeOption0::from_u16(
+                (bq25730_async_rs::registers::ChargeOption0Flags::EN_CMP_LATCH.bits() as u16)
+                    | ((bq25730_async_rs::registers::ChargeOption0MsbFlags::EN_LWPWR.bits()
+                        as u16)
+                        << 8),
+            );
+            let (lsb, msb) = option.to_msb_lsb_bytes();
+            vec![
+                bq25730_async_rs::registers::Register::ChargeOption0 as u8,
+                lsb,
+                msb,
+            ]
+        }), // LSB, MSB (EN_CMP_LATCH | EN_LWPWR)
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
 
     charger.set_charge_option0(bq25730_async_rs::data_types::ChargeOption0::from_u16(
         0x0000,
@@ -239,7 +255,8 @@ fn test_charge_control_read_charge_option0(
             .to_vec(),
         ), // LSB, MSB
     ];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
 
     assert_eq!(
         charger.read_charge_option0()?,

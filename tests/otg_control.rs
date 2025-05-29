@@ -1,6 +1,6 @@
 #![allow(clippy::approx_constant)]
 
-include!("common.rs");
+use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
 
 use bq25730_async_rs::BQ25730_I2C_ADDRESS;
 use bq25730_async_rs::{data_types::*, registers::Register, Error};
@@ -8,12 +8,12 @@ use embedded_hal::i2c::ErrorKind;
 
 #[test]
 fn test_set_otg_voltage() -> Result<(), Error<ErrorKind>> {
-    let expectations = [write_registers_transaction(
+    let expectations = [I2cTransaction::write(
         BQ25730_I2C_ADDRESS,
-        Register::OTGVoltage,
-        &[0x88, 0x13], // 5000mV (raw = 625) - LSB, MSB
+        vec![Register::OTGVoltage as u8, 0x88, 0x13], // 5000mV (raw = 625) - LSB, MSB
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     charger.set_otg_voltage(OtgVoltage(5000))?;
     charger.i2c.done();
 
@@ -22,12 +22,13 @@ fn test_set_otg_voltage() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_read_otg_voltage() -> Result<(), Error<ErrorKind>> {
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::OTGVoltage,
-        &[0x88, 0x13], // 5000mV (raw = 625)
+        vec![Register::OTGVoltage as u8],
+        vec![0x88, 0x13], // 5000mV (raw = 625)
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let voltage = charger.read_otg_voltage()?;
     assert_eq!(voltage.0, 5000);
     charger.i2c.done();
@@ -37,30 +38,30 @@ fn test_read_otg_voltage() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_set_otg_current() -> Result<(), Error<ErrorKind>> {
-    let expectations = [write_registers_transaction(
+    let expectations = [I2cTransaction::write(
         BQ25730_I2C_ADDRESS,
-        Register::OTGCurrent,
-        &[0x00, 0x00], // 0mA
+        vec![Register::OTGCurrent as u8, 0x00, 0x00], // 0mA
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     charger.set_otg_current(OtgCurrent(0))?;
     charger.i2c.done();
 
-    let expectations = [write_registers_transaction(
+    let expectations = [I2cTransaction::write(
         BQ25730_I2C_ADDRESS,
-        Register::OTGCurrent,
-        &[0x00, 0x0A], // 1000mA (raw = 10) - LSB, MSB
+        vec![Register::OTGCurrent as u8, 0x00, 0x0A], // 1000mA (raw = 10) - LSB, MSB
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     charger.set_otg_current(OtgCurrent(1000))?;
     charger.i2c.done();
 
-    let expectations = [write_registers_transaction(
+    let expectations = [I2cTransaction::write(
         BQ25730_I2C_ADDRESS,
-        Register::OTGCurrent,
-        &[0x00, 0x7F], // 12700mA (raw = 127) - LSB, MSB
+        vec![Register::OTGCurrent as u8, 0x00, 0x7F], // 12700mA (raw = 127) - LSB, MSB
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     charger.set_otg_current(OtgCurrent(12700))?;
     charger.i2c.done();
 
@@ -69,32 +70,35 @@ fn test_set_otg_current() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_read_otg_current() -> Result<(), Error<ErrorKind>> {
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::OTGCurrent,
-        &[0x00, 0x00], // 0mA
+        vec![Register::OTGCurrent as u8],
+        vec![0x00, 0x00], // 0mA
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let current = charger.read_otg_current()?;
     assert_eq!(current.0, 0);
     charger.i2c.done();
 
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::OTGCurrent,
-        &[0x00, 0x0A], // 1000mA
+        vec![Register::OTGCurrent as u8],
+        vec![0x00, 0x0A], // 1000mA
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let current = charger.read_otg_current()?;
     assert_eq!(current.0, 1000);
     charger.i2c.done();
 
-    let expectations = [read_registers_transaction(
+    let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
-        Register::OTGCurrent,
-        &[0x00, 0x7F], // 12700mA
+        vec![Register::OTGCurrent as u8],
+        vec![0x00, 0x7F], // 12700mA
     )];
-    let mut charger = new_bq25730_with_mock(&expectations);
+    let i2c = I2cMock::new(&expectations);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
     let current = charger.read_otg_current()?;
     assert_eq!(current.0, 12700);
     charger.i2c.done();
