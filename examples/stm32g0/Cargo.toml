@@ -47,7 +47,7 @@ static_cell = "2.1.0"
 libm = "0.2.8"
 uom = { version = "0.37", default-features = false, features = ["si", "f32"] }
 
-bq25730-async-rs = { version = "0.1.1", path = "../../", features = ["async", "defmt"] }
+bq25730-async-rs = { version = "*", path = "../../", features = ["async", "defmt"] }
 
 [profile.dev]
 codegen-units = 1
