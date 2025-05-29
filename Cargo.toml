@@ -22,7 +22,6 @@ heapless = "0.8"                                            # Add heapless depen
 defmt = { version = "1.0.1", optional = true }              # Add def
 binrw = { version = "0.15.0", default-features = false, optional = true }
 bitflags = "2.9"
-nb = { version = "0.1.2", default-features = false } # Explicitly add nb and disable default features
 
 [dev-dependencies]
 embedded-hal-mock = "0.11"
