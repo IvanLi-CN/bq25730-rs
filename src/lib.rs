@@ -291,12 +291,14 @@ where
         let ichg_raw = self.read_registers(Register::ADCICHG, 1).await?;
         let cmpin_raw = self.read_registers(Register::ADCCMPIN, 1).await?;
         let iin_raw = self.read_registers(Register::ADCIIN, 1).await?;
-        let vbat_raw = self.read_registers(Register::ADCVBAT, 2).await?;
-        let vsys_raw = self.read_registers(Register::ADCVSYS, 2).await?;
+        let vbat_raw = self.read_registers(Register::ADCVBAT, 2).await?; // Reads 0x2C (LSB), 0x2D (MSB)
+        // ADCVSYS data is in register 0x2D (which is ADCVBAT_MSB).
+        // So, vsys_msb_raw is the second byte read for ADCVBAT.
+        let vsys_msb_raw = vbat_raw.as_ref()[1]; // This is the content of 0x2D
 
         Ok(AdcMeasurements {
-            vbat: AdcVbat::from_u16(u16::from_le_bytes([vbat_raw[0], vbat_raw[1]]), offset_mv),
-            vsys: AdcVsys::from_u16(u16::from_le_bytes([vsys_raw[0], vsys_raw[1]]), offset_mv),
+            vbat: AdcVbat::from_register_value(vbat_raw.as_ref()[0], vbat_raw.as_ref()[1], offset_mv), // Use from_register_value
+            vsys: AdcVsys::from_register_value(0, vsys_msb_raw, offset_mv), // LSB for VSYS ADC is not used from a separate reg
             ichg: AdcIchg::from_u8(ichg_raw[0]),
             idchg: AdcIdchg::from_u8(idchg_raw[0]),
             iin: AdcIin::from_u8(iin_raw[0], self.rsns_rac_is_5m_ohm),

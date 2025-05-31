@@ -33,6 +33,11 @@ where
     assert_eq!(original, deserialized);
 }
 
+/// Test that `ChargerStatus` can be serialized and deserialized correctly.
+///
+/// This test creates a `ChargerStatus` with all possible flags set, then
+/// serializes it to a buffer and deserializes it back. It then asserts that the
+/// deserialized value is equal to the original.
 #[test]
 fn test_charger_status_binrw_roundtrip() {
     let original = ChargerStatus {

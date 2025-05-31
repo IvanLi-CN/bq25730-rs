@@ -28,9 +28,9 @@ impl defmt::Format for ChargerStatus {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(
             fmt,
-            "ChargerStatus {{ status_flags: {=u8:b}, fault_flags: {=u8:b} }}",
-            self.status_flags.bits(),
-            self.fault_flags.bits()
+            "ChargerStatus {{ status_flags: {}, fault_flags: {} }}",
+            self.status_flags,
+            self.fault_flags
         );
     }
 }
@@ -59,14 +59,102 @@ impl ChargerStatus {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ChargerStatusFlags {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{=u8:b}", self.bits());
+        if self.is_empty() {
+            defmt::write!(fmt, "(empty)");
+            return;
+        }
+        let mut first = true;
+        if self.contains(ChargerStatusFlags::STAT_AC) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_AC");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::ICO_DONE) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "ICO_DONE");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::IN_VAP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "IN_VAP");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::IN_VINDPM) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "IN_VINDPM");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::IN_IIN_DPM) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "IN_IIN_DPM");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::IN_FCHRG) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "IN_FCHRG");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::IN_PCHRG) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "IN_PCHRG");
+            first = false;
+        }
+        if self.contains(ChargerStatusFlags::IN_OTG) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "IN_OTG");
+            // first = false; // Not needed for the last one
+        }
     }
 }
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for ChargerStatusFaultFlags {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{=u8:b}", self.bits());
+        if self.is_empty() {
+            defmt::write!(fmt, "(empty)");
+            return;
+        }
+        let mut first = true;
+        if self.contains(ChargerStatusFaultFlags::FAULT_ACOV) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_ACOV");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_BATOC) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_BATOC");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_ACOC) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_ACOC");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_SYSOVP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_SYSOVP");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_VSYS_UVP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_VSYS_UVP");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_FORCE_CONVERTER_OFF) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_FORCE_CONVERTER_OFF");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_OTG_OVP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_OTG_OVP");
+            first = false;
+        }
+        if self.contains(ChargerStatusFaultFlags::FAULT_OTG_UVP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "FAULT_OTG_UVP");
+            // first = false; // Not needed for the last one
+        }
     }
 }
 
@@ -201,24 +289,13 @@ impl ChargeCurrent {
 pub struct ChargeVoltage(pub u16);
 
 impl ChargeVoltage {
-    /// LSB value for Charge Voltage in mV.
-    pub const LSB_MV: u16 = 8; // 8mV/LSB
 
     /// Creates a new ChargeVoltage from a 16-bit raw register value.
     /// The 12-bit value (D11-D0) is formed by:
     /// MSB (0x05): D11-D5 in bits 6:0
-    /// LSB (0x04): D4-D0 in bits 4:0
+    /// LSB (0x04): D4-D0 in bits 7:3
     pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        let lsb = value as u8;
-        // D11-D5 are in msb bits 6:0
-        // D4-D0 are in lsb bits 4:0
-        let d11_d5 = (msb & 0x7F) as u16; // Extract bits 6:0 from msb
-        let d4_d0 = (lsb & 0x1F) as u16; // Extract bits 4:0 from lsb
-
-        // Combine them to form a 12-bit raw_value (D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 D0)
-        let raw_value = (d11_d5 << 5) | d4_d0;
-        ChargeVoltage(raw_value * Self::LSB_MV)
+        ChargeVoltage(value & 0x7FF8)
     }
 
     /// Converts the ChargeVoltage to a 16-bit raw register value.
@@ -226,21 +303,18 @@ impl ChargeVoltage {
     /// MSB (0x05): D11-D5 in bits 6:0
     /// LSB (0x04): D4-D0 in bits 4:0
     pub fn to_u16(&self) -> u16 {
-        let raw_value = self.0 / Self::LSB_MV;
         // raw_value is a 12-bit value (D11-D0)
         // msb (0x05) bits 6:0 should be D11-D5
-        // lsb (0x04) bits 4:0 should be D4-D0
-        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
-        let lsb = (raw_value & 0x1F) as u8; // D4-D0
-        (lsb as u16) | ((msb as u16) << 8)
+        // lsb (0x04) bits 7:3 should be D4-D0
+        self.0 & 0x7FF8
     }
 
     /// Converts the ChargeVoltage to raw MSB and LSB register values.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = self.0 / Self::LSB_MV;
-        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
-        let lsb = (raw_value & 0x1F) as u8; // D4-D0
-        (lsb, msb)
+        let raw_value = self.0;
+        let msb = ((raw_value & 0x7F) >> 8) as u8; // D11-D5
+        let lsb = (raw_value & 0x07) as u8; // D4-D0, shifted to bits 7:3 for 04h register
+        (lsb, msb) // Returns (04h_value, 05h_value)
     }
 
     /// Converts the ChargeVoltage to millivolts.
