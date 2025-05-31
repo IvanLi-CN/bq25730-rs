@@ -4,18 +4,23 @@ use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction
 
 use bq25730_async_rs::errors::Error;
 use bq25730_async_rs::registers::Register;
-use bq25730_async_rs::BQ25730_I2C_ADDRESS;
+use bq25730_async_rs::{
+    data_types::{Config, SenseResistorValue}, // Updated imports
+    BQ25730_I2C_ADDRESS,
+};
 use embedded_hal::i2c::ErrorKind;
 
 #[test]
 fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
+    // Corrected Config::new call
+    let config = Config::new(4, SenseResistorValue::default(), SenseResistorValue::R5mOhm);
     let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
         vec![Register::ChargerStatus as u8],
         vec![0x80, 0x80], // LSB: Fault ACOV, MSB: STAT_AC
     )];
     let i2c = I2cMock::new(&expectations);
-    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, BQ25730_I2C_ADDRESS, config);
     let status = charger.read_charger_status()?;
     assert!(status
         .status_flags
@@ -31,7 +36,7 @@ fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
         vec![0x00, 0x00], // All false
     )];
     let i2c = I2cMock::new(&expectations);
-    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, BQ25730_I2C_ADDRESS, config);
     let status = charger.read_charger_status()?;
     assert!(!status
         .status_flags
@@ -88,13 +93,15 @@ fn test_read_charger_status() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
+    // Corrected Config::new call
+    let config = Config::new(4, SenseResistorValue::default(), SenseResistorValue::R5mOhm);
     let expectations = [I2cTransaction::write_read(
         BQ25730_I2C_ADDRESS,
         vec![Register::ProchotStatus as u8],
         vec![0x01, 0x40], // LSB: STAT_ADPT_REMOVAL, MSB: EN_PROCHOT_EXT
     )];
     let i2c = I2cMock::new(&expectations);
-    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, BQ25730_I2C_ADDRESS, config);
     let status = charger.read_prochot_status()?;
     assert!(status
         .msb_flags
@@ -102,7 +109,6 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
     assert!(status
         .lsb_flags
         .contains(bq25730_async_rs::registers::ProchotStatusFlags::STAT_ADPT_REMOVAL));
-    // assert_eq!(status.stat_idchg2, true); // Removed as ChargeOption4 is gone
     charger.i2c.done();
 
     let expectations = [I2cTransaction::write_read(
@@ -111,7 +117,7 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
         vec![0x00, 0x00], // All false
     )];
     let i2c = I2cMock::new(&expectations);
-    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
+    let mut charger = bq25730_async_rs::Bq25730::new(i2c, BQ25730_I2C_ADDRESS, config);
     let status = charger.read_prochot_status()?;
     assert!(!status
         .msb_flags
@@ -150,8 +156,6 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
     assert!(!status
         .lsb_flags
         .contains(bq25730_async_rs::registers::ProchotStatusFlags::STAT_ADPT_REMOVAL));
-    // assert_eq!(status.stat_idchg2, false); // Removed as ChargeOption4 is gone
-    // assert_eq!(status.stat_ptm, false); // Removed as ChargeOption4 is gone
     charger.i2c.done();
 
     Ok(())
@@ -159,60 +163,72 @@ fn test_read_prochot_status() -> Result<(), Error<ErrorKind>> {
 
 #[test]
 fn test_read_adc_measurements() -> Result<(), Error<ErrorKind>> {
-    let expectations = [
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
+    // For 5mOhm RsnsAc
+    // Corrected Config::new call
+    let config_5m_ohm_ac = Config::new(4, SenseResistorValue::default(), SenseResistorValue::R5mOhm);
+    let expectations_5m_ohm = [
+        I2cTransaction::write_read(
+            BQ25730_I2C_ADDRESS,
             vec![Register::ADCPSYS as u8],
-            vec![0x01],
-        ), // 12mV (raw = 1)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCVBUS as u8],
-            vec![0x01],
-        ), // 96mV (raw = 1)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCIDCHG as u8],
-            vec![0x01],
-        ), // 512mA (raw = 1)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCICHG as u8],
-            vec![0x01],
-        ), // 128mA (raw = 1)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCCMPIN as u8],
-            vec![0x01],
-        ), // 12mV (raw = 1)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCIIN as u8],
-            vec![0x01],
-        ), // 100mA (raw = 1)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCVBAT as u8],
-            vec![0x00, 0x01],
-        ), // 2944mV (raw = 46)
-        embedded_hal_mock::eh1::i2c::Transaction::write_read(
-            bq25730_async_rs::BQ25730_I2C_ADDRESS,
-            vec![Register::ADCVSYS as u8],
-            vec![0x00, 0x01],
-        ), // 64mV (raw = 1)
+            vec![
+                0x01, // ADCPSYS (raw=1) -> 12mV
+                0x01, // ADCVBUS (raw=1) -> 96mV
+                0x01, // ADCIDCHG (raw=1) -> 512mA (for default RsnsBat::R5mOhm)
+                0x01, // ADCICHG (raw=1) -> 128mA (for default RsnsBat::R5mOhm)
+                0x01, // ADCCMPIN (raw=1) -> 12mV
+                0x01, // ADCIIN (raw=1) -> 100mA (for RsnsAc::R5mOhm)
+                0x00, // ADCVBAT_LSB
+                0x2E, // ADCVBAT_MSB (raw=46) -> 2880 (offset for 4S) + 46*64 = 5824mV
+            ],
+        ),
     ];
-    let i2c = I2cMock::new(&expectations);
-    let mut charger = bq25730_async_rs::Bq25730::new(i2c, bq25730_async_rs::BQ25730_I2C_ADDRESS, 4);
-    let measurements = charger.read_adc_measurements()?;
-    assert_eq!(measurements.psys.0, 12); // PSYS is in mV, 12mV/LSB
-    assert_eq!(measurements.vbus.0, 96);
-    assert_eq!(measurements.idchg.0, 512);
-    assert_eq!(measurements.ichg.0, 128);
-    assert_eq!(measurements.cmpin.0, 12);
-    assert_eq!(measurements.iin.milliamps, 50);
-    assert_eq!(measurements.vbat.0, 2880 + 64);
-    assert_eq!(measurements.vsys.0, 2880 + 64); // Corrected expected value based on LSB_MV and offset_mv
-    charger.i2c.done();
+    let i2c_5m_ohm = I2cMock::new(&expectations_5m_ohm);
+    let mut charger_5m_ohm = bq25730_async_rs::Bq25730::new(i2c_5m_ohm, BQ25730_I2C_ADDRESS, config_5m_ohm_ac);
+    let measurements_5m_ohm = charger_5m_ohm.read_adc_measurements()?;
+    assert_eq!(measurements_5m_ohm.psys.0, 12);
+    assert_eq!(measurements_5m_ohm.vbus.0, 96);
+    assert_eq!(measurements_5m_ohm.idchg.milliamps, 512);
+    assert_eq!(measurements_5m_ohm.ichg.milliamps, 128);
+    assert_eq!(measurements_5m_ohm.cmpin.0, 12);
+    assert_eq!(measurements_5m_ohm.iin.milliamps, 100);
+    assert_eq!(measurements_5m_ohm.vbat.0, 2880 + (46 * 64));
+    assert_eq!(measurements_5m_ohm.vsys.0, 2880 + (46 * 64));
+    charger_5m_ohm.i2c.done();
+
+    // For 10mOhm RsnsAc
+    // Corrected Config::new call
+    let config_10m_ohm_ac = Config::new(4, SenseResistorValue::default(), SenseResistorValue::R10mOhm);
+    let expectations_10m_ohm = [
+        I2cTransaction::write_read(
+            BQ25730_I2C_ADDRESS,
+            vec![Register::ADCPSYS as u8],
+            vec![
+                0x01, // ADCPSYS (raw=1) -> 12mV
+                0x01, // ADCVBUS (raw=1) -> 96mV
+                0x01, // ADCIDCHG (raw=1) -> 256mA (for default RsnsBat::R5mOhm, this test should ideally use RsnsBat::R10mOhm for idchg/ichg if config implies it)
+                0x01, // ADCICHG (raw=1) -> 64mA (for default RsnsBat::R5mOhm)
+                0x01, // ADCCMPIN (raw=1) -> 12mV
+                0x01, // ADCIIN (raw=1) -> 50mA (for RsnsAc::R10mOhm)
+                0x00, // ADCVBAT_LSB
+                0x2E, // ADCVBAT_MSB (raw=46) -> 5824mV
+            ],
+        ),
+    ];
+    let i2c_10m_ohm = I2cMock::new(&expectations_10m_ohm);
+    let mut charger_10m_ohm = bq25730_async_rs::Bq25730::new(i2c_10m_ohm, BQ25730_I2C_ADDRESS, config_10m_ohm_ac);
+    let measurements_10m_ohm = charger_10m_ohm.read_adc_measurements()?;
+    assert_eq!(measurements_10m_ohm.psys.0, 12);
+    assert_eq!(measurements_10m_ohm.vbus.0, 96);
+    // The AdcIchg/AdcIdchg use RsnsBat::default() which is R5mOhm.
+    // If the test intent was to use R10mOhm for battery path as well, the mock data or AdcIchg/Idchg creation needs adjustment.
+    // For now, asserting against the RsnsBat::default() behavior.
+    assert_eq!(measurements_10m_ohm.idchg.milliamps, 512); // Still 512mA due to RsnsBat::default()
+    assert_eq!(measurements_10m_ohm.ichg.milliamps, 128);   // Still 128mA due to RsnsBat::default()
+    assert_eq!(measurements_10m_ohm.cmpin.0, 12);
+    assert_eq!(measurements_10m_ohm.iin.milliamps, 50);
+    assert_eq!(measurements_10m_ohm.vbat.0, 2880 + (46 * 64));
+    assert_eq!(measurements_10m_ohm.vsys.0, 2880 + (46 * 64));
+    charger_10m_ohm.i2c.done();
 
     Ok(())
 }

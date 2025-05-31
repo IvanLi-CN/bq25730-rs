@@ -13,6 +13,20 @@ use crate::registers::{
 #[cfg(feature = "binrw")]
 use binrw::{BinRead, BinWrite};
 
+/// Enum to represent the sense resistor value.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum SenseResistorValue {
+    R5mOhm,  // 5mΩ sense resistor
+    R10mOhm, // 10mΩ sense resistor
+}
+
+impl Default for SenseResistorValue {
+    fn default() -> Self {
+        SenseResistorValue::R5mOhm // Default to 5mOhm
+    }
+}
+
 /// Represents the status of the BQ25730 charger.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
@@ -245,57 +259,53 @@ impl defmt::Format for ProchotStatus {
 /// Represents the Charge Current setting in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = ChargeCurrent::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct ChargeCurrent(pub u16);
+pub struct ChargeCurrent {
+    pub milliamps: u16,
+    pub rsns_bat: SenseResistorValue,
+}
+
+impl Default for ChargeCurrent {
+    fn default() -> Self {
+        Self {
+            milliamps: 0,
+            rsns_bat: SenseResistorValue::default(),
+        }
+    }
+}
 
 impl ChargeCurrent {
-    /// LSB value for Charge Current in mA (with 5mΩ sense resistor).
-    pub const LSB_MA: u16 = 128; // 128mA/LSB for 5mΩ sense resistor
-
-    /// Creates a new ChargeCurrent from a 16-bit raw register value.
-    /// The 7-bit value (D6-D0) is formed by:
-    /// MSB (0x03): D6-D2 in bits 4:0
-    /// LSB (0x02): D1-D0 in bits 7:6
-    pub fn from_u16(value: u16) -> Self {
-        // D6-D2 are in msb bits 4:0
-        // D1-D0 are in lsb bits 7:6
-        let msb = (value >> 8) as u8;
-        let lsb = value as u8;
-        let d6_d2 = (msb & 0x1F) as u16; // Extract bits 4:0 from msb
-        let d1_d0 = ((lsb >> 6) & 0x03) as u16; // Extract bits 7:6 from lsb
-
-        // Combine them to form a 7-bit raw_value (D6 D5 D4 D3 D2 D1 D0)
-        let raw_value = (d6_d2 << 2) | d1_d0;
-        ChargeCurrent(raw_value * Self::LSB_MA)
+    /// Creates a new ChargeCurrent from a raw 7-bit register value and RSNS setting.
+    /// The 7-bit value represents the charge current setting.
+    pub fn from_raw(raw_7bit: u8, rsns_bat: SenseResistorValue) -> Self {
+        let lsb_ma = match rsns_bat {
+            SenseResistorValue::R5mOhm => 128, // 128mA/LSB for 5mΩ
+            SenseResistorValue::R10mOhm => 64, // 64mA/LSB for 10mΩ
+        };
+        // Raw value is 7-bit (0-127)
+        Self {
+            milliamps: (raw_7bit as u16) * lsb_ma,
+            rsns_bat,
+        }
     }
 
-    /// Converts the ChargeCurrent to a 16-bit raw register value.
-    /// The 7-bit value (D6-D0) is formed by:
-    /// MSB (0x03): D6-D2 in bits 4:0
-    /// LSB (0x02): D1-D0 in bits 7:6
-    pub fn to_u16(&self) -> u16 {
-        let raw_value = self.0 / Self::LSB_MA;
-        // raw_value is a 7-bit value (D6-D0)
-        // msb (0x03) bits 4:0 should be D6-D2
-        // lsb (0x02) bits 7:6 should be D1-D0
-        let msb = ((raw_value >> 2) & 0x1F) as u8; // D6-D2
-        let lsb = ((raw_value & 0x03) << 6) as u8; // D1-D0 shifted to bits 7:6
-        (lsb as u16) | ((msb as u16) << 8)
-    }
-
-    /// Converts the ChargeCurrent to raw MSB and LSB register values.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = self.0 / Self::LSB_MA;
-        let msb = ((raw_value >> 2) & 0x1F) as u8; // D6-D2
-        let lsb = ((raw_value & 0x03) << 6) as u8; // D1-D0 shifted to bits 7:6
-        (lsb, msb)
+    /// Converts the ChargeCurrent to a raw 7-bit register value.
+    pub fn to_raw(&self) -> u8 {
+        let lsb_ma = match self.rsns_bat {
+            SenseResistorValue::R5mOhm => 128,
+            SenseResistorValue::R10mOhm => 64,
+        };
+        // Ensure the result fits in 7 bits (0-127)
+        let raw_value = self.milliamps / lsb_ma;
+        if raw_value > 0x7F {
+            0x7F // Clamp to max 7-bit value
+        } else {
+            raw_value as u8
+        }
     }
 
     /// Converts the ChargeCurrent to milliamps.
     pub fn to_milliamps(&self) -> u16 {
-        self.0
+        self.milliamps
     }
 }
 
@@ -394,55 +404,49 @@ impl OtgVoltage {
     }
 }
 
-/// Represents the OTG Current setting in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = OtgCurrent::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct OtgCurrent(pub u16);
+pub struct OtgCurrent {
+    pub milliamps: u16,
+    pub rsns_bat: SenseResistorValue,
+}
+
+impl Default for OtgCurrent {
+    fn default() -> Self {
+        Self {
+            milliamps: 0,
+            rsns_bat: SenseResistorValue::default(),
+        }
+    }
+}
 
 impl OtgCurrent {
-    /// LSB value for OTG Current in mA (with 5mΩ sense resistor).
-    pub const LSB_MA: u16 = 100;
-
-    /// Creates a new OtgCurrent from a 16-bit raw register value.
-    /// The 7-bit value (D6-D0) is formed by:
-    /// MSB (0x09): D6-D0 in bits 6:0
-    /// LSB (0x08): Reserved
-    pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        let raw_value = (msb & 0x7F) as u16; // D6-D0
-        OtgCurrent(raw_value * Self::LSB_MA)
+    /// Creates a new OtgCurrent from a raw 7-bit register value and RSNS setting.
+    pub fn from_raw(raw_7bit: u8, rsns_bat: SenseResistorValue) -> Self {
+        let lsb_ma = match rsns_bat {
+            SenseResistorValue::R5mOhm => 100, // 100mA/LSB for 5mΩ
+            SenseResistorValue::R10mOhm => 50,  // 50mA/LSB for 10mΩ
+        };
+        // Raw value is 7-bit (0-127)
+        Self {
+            milliamps: (raw_7bit as u16) * lsb_ma,
+            rsns_bat,
+        }
     }
 
-    /// Converts the OtgCurrent to a 16-bit raw register value.
-    /// The 7-bit value (D6-D0) is formed by:
-    /// MSB (0x09): D6-D0 in bits 6:0
-    /// LSB (0x08): Reserved
-    pub fn to_u16(&self) -> u16 {
-        let raw_value = self.0 / Self::LSB_MA;
-        // OTGCurrent is a 7-bit value (D6-D0)
-        // MSB (0x09): D6-D0 in bits 6:0
-        // LSB (0x08): Reserved
-        let msb = (raw_value & 0x7F) as u8; // D6-D0 in bits 6:0 of MSB (0x09)
-        let lsb = 0x00; // LSB (0x08) is reserved, write 0
-        (lsb as u16) | ((msb as u16) << 8)
-    }
-
-    /// Converts the OtgCurrent to raw MSB and LSB register values.
-    /// Since OTGCurrent is an 8-bit register, LSB will be 0.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = self.0 / Self::LSB_MA;
-        let msb = (raw_value & 0x7F) as u8; // D6-D0 in bits 6:0 of MSB (0x09)
-        let lsb = 0x00; // LSB (0x08) is reserved, write 0
-        (lsb, msb)
-    }
-
-    /// Converts the OtgCurrent to a raw 8-bit register value (MSB part).
-    pub fn to_register_value(&self) -> u8 {
-        let raw_value = self.0 / Self::LSB_MA;
-        (raw_value & 0x7F) as u8 // Return MSB part (D6-D0)
+    /// Converts the OtgCurrent to a raw 7-bit register value.
+    pub fn to_raw(&self) -> u8 {
+        let lsb_ma = match self.rsns_bat {
+            SenseResistorValue::R5mOhm => 100,
+            SenseResistorValue::R10mOhm => 50,
+        };
+        // Ensure the result fits in 7 bits (0-127)
+        let raw_value = self.milliamps / lsb_ma;
+        if raw_value > 0x7F {
+            0x7F // Clamp to max 7-bit value
+        } else {
+            raw_value as u8
+        }
     }
 }
 
@@ -565,98 +569,113 @@ impl VsysMin {
 /// Represents the Input Current Limit Set by Host in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = IinHost::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct IinHost(pub u16);
+pub struct IinHost {
+    pub milliamps: u16,
+    pub rsns_ac: SenseResistorValue,
+}
+
+impl Default for IinHost {
+    fn default() -> Self {
+        // Default to minimum possible value based on default Rsns
+        let rsns_ac = SenseResistorValue::default();
+        let (_lsb_ma, offset_ma) = match rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100),
+            SenseResistorValue::R10mOhm => (50, 50),
+        };
+        Self {
+            milliamps: offset_ma,
+            rsns_ac,
+        }
+    }
+}
 
 impl IinHost {
-    /// LSB value for Input Current Limit Set by Host in mA.
-    pub const LSB_MA: u16 = 100; // 100mA/LSB for 5mΩ sense resistor
-    /// Offset value for Input Current Limit Set by Host in mA.
-    pub const OFFSET_MA: u16 = 100; // 100mA offset at code 0
-
-    /// Creates a new IinHost from a 16-bit raw register value.
-    pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        IinHost(((msb & 0x7F) as u16) * Self::LSB_MA + Self::OFFSET_MA)
-    }
-
-    /// Converts the IinHost to a 16-bit raw register value.
-    pub fn to_u16(&self) -> u16 {
-        // Ensure the value is not less than the offset to prevent overflow
-        let raw_value = if self.0 >= Self::OFFSET_MA {
-            (self.0 - Self::OFFSET_MA) / Self::LSB_MA
-        } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MA)
+    /// Creates a new IinHost from a raw 7-bit register value and RSNS setting.
+    pub fn from_raw(raw_7bit: u8, rsns_ac: SenseResistorValue) -> Self {
+        let (lsb_ma, offset_ma) = match rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100), // LSB 100mA, Offset 100mA for 5mΩ
+            SenseResistorValue::R10mOhm => (50, 50),   // LSB 50mA, Offset 50mA for 10mΩ
         };
-        (raw_value & 0x7F) << 8
+        // Raw value is 7-bit (0-127)
+        Self {
+            milliamps: (raw_7bit as u16) * lsb_ma + offset_ma,
+            rsns_ac,
+        }
     }
 
-    /// Converts the IinHost to a raw 8-bit register value.
-    pub fn to_register_value(&self) -> u8 {
-        // Ensure the value is not less than the offset to prevent overflow
-        let raw_value = if self.0 >= Self::OFFSET_MA {
-            (self.0 - Self::OFFSET_MA) / Self::LSB_MA
-        } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MA)
+    /// Converts the IinHost to a raw 7-bit register value.
+    pub fn to_raw(&self) -> u8 {
+        let (lsb_ma, offset_ma) = match self.rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100),
+            SenseResistorValue::R10mOhm => (50, 50),
         };
-        raw_value as u8
-    }
-
-    /// Converts the IinHost to raw MSB and LSB register values.
-    /// Since IinHost is an 8-bit register, LSB will be 0.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0x00, self.to_register_value())
+        let raw_value = if self.milliamps >= offset_ma {
+            (self.milliamps - offset_ma) / lsb_ma
+        } else {
+            0 // Clamp to 0 if milliamps is less than offset
+        };
+        // Ensure the result fits in 7 bits (0-127)
+        if raw_value > 0x7F {
+            0x7F // Clamp to max 7-bit value
+        } else {
+            raw_value as u8
+        }
     }
 }
 
 /// Represents the Input Current Limit in Use (IIN_DPM) in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = IinDpm::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct IinDpm(pub u16);
+pub struct IinDpm {
+    pub milliamps: u16,
+    pub rsns_ac: SenseResistorValue,
+}
+
+impl Default for IinDpm {
+    fn default() -> Self {
+        let rsns_ac = SenseResistorValue::default();
+        let (_lsb_ma, offset_ma) = match rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100),
+            SenseResistorValue::R10mOhm => (50, 50),
+        };
+        Self {
+            milliamps: offset_ma,
+            rsns_ac,
+        }
+    }
+}
 
 impl IinDpm {
-    /// LSB value for Input Current Limit in Use (IIN_DPM) in mA.
-    pub const LSB_MA: u16 = 100; // 100mA/LSB for 5mΩ sense resistor
-    /// Offset value for Input Current Limit in Use (IIN_DPM) in mA.
-    pub const OFFSET_MA: u16 = 100; // 100mA offset at code 0
-
-    /// Creates a new IinDpm from a 16-bit raw register value.
-    pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        IinDpm(((msb & 0x7F) as u16) * Self::LSB_MA + Self::OFFSET_MA)
-    }
-
-    /// Converts the IinDpm to a 16-bit raw register value.
-    pub fn to_u16(&self) -> u16 {
-        // Ensure the value is not less than the offset to prevent overflow
-        let raw_value = if self.0 >= Self::OFFSET_MA {
-            (self.0 - Self::OFFSET_MA) / Self::LSB_MA
-        } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MA)
+    /// Creates a new IinDpm from a raw 7-bit register value and RSNS setting.
+    pub fn from_raw(raw_7bit: u8, rsns_ac: SenseResistorValue) -> Self {
+        let (lsb_ma, offset_ma) = match rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100), // LSB 100mA, Offset 100mA for 5mΩ
+            SenseResistorValue::R10mOhm => (50, 50),   // LSB 50mA, Offset 50mA for 10mΩ
         };
-        (raw_value & 0x7F) << 8
+        // Raw value is 7-bit (0-127)
+        Self {
+            milliamps: (raw_7bit as u16) * lsb_ma + offset_ma,
+            rsns_ac,
+        }
     }
 
-    /// Converts the IinDpm to a raw 8-bit register value.
-    pub fn to_register_value(&self) -> u8 {
-        // Ensure the value is not less than the offset to prevent overflow
-        let raw_value = if self.0 >= Self::OFFSET_MA {
-            (self.0 - Self::OFFSET_MA) / Self::LSB_MA
-        } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MA)
+    /// Converts the IinDpm to a raw 7-bit register value.
+    pub fn to_raw(&self) -> u8 {
+        let (lsb_ma, offset_ma) = match self.rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100),
+            SenseResistorValue::R10mOhm => (50, 50),
         };
-        raw_value as u8
-    }
-
-    /// Converts the IinDpm to raw MSB and LSB register values.
-    /// Since IinDpm is an 8-bit register, LSB will be 0.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0x00, self.to_register_value())
+        let raw_value = if self.milliamps >= offset_ma {
+            (self.milliamps - offset_ma) / lsb_ma
+        } else {
+            0 // Clamp to 0 if milliamps is less than offset
+        };
+        // Ensure the result fits in 7 bits (0-127)
+        if raw_value > 0x7F {
+            0x7F // Clamp to max 7-bit value
+        } else {
+            raw_value as u8
+        }
     }
 }
 
@@ -745,144 +764,141 @@ impl AdcCmpin {
 /// Represents the ADCICHG register value in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = AdcIchg::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct AdcIchg(pub u16);
+pub struct AdcIchg {
+    pub milliamps: u16,
+    pub rsns_bat: SenseResistorValue,
+}
 
 impl Default for AdcIchg {
     fn default() -> Self {
-        Self(0)
+        Self {
+            milliamps: 0,
+            rsns_bat: SenseResistorValue::default(),
+        }
     }
 }
 
 impl AdcIchg {
-    /// LSB value for ADCICHG in mA (with 5mΩ sense resistor).
-    pub const LSB_MA: u16 = 128;
-
-    /// Creates a new AdcIchg from a 16-bit raw register value.
-    pub fn from_u16(value: u16) -> Self {
-        AdcIchg(value) // Assuming value is already in mA
-    }
-
-    /// Creates a new AdcIchg from an 8-bit raw register value.
-    /// Converts the 7-bit raw value to mA based on LSB.
-    pub fn from_u8(raw_value: u8) -> Self {
+    /// Creates a new AdcIchg from a raw 7-bit ADC value and RSNS setting.
+    pub fn from_raw(raw_7bit_adc: u8, rsns_bat: SenseResistorValue) -> Self {
+        let lsb_ma = match rsns_bat {
+            SenseResistorValue::R5mOhm => 128, // 128mA/LSB for 5mΩ
+            SenseResistorValue::R10mOhm => 64,  // 64mA/LSB for 10mΩ
+        };
         // ADCICHG is a 7-bit value (0-127)
-        AdcIchg((raw_value as u16) * Self::LSB_MA)
+        Self {
+            milliamps: (raw_7bit_adc as u16) * lsb_ma,
+            rsns_bat,
+        }
     }
 
-    /// Converts the AdcIchg to a 16-bit raw register value.
-    pub fn to_u16(&self) -> u16 {
-        self.0 // Assuming self.0 is already in mA
-    }
-
-    /// Converts the AdcIchg to raw MSB and LSB register values.
-    /// Since ADCICHG is an 8-bit register, LSB will be 0.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0x00, (self.0 / Self::LSB_MA) as u8) // Convert mA back to raw 7-bit value
+    /// Converts the AdcIchg to a raw 7-bit ADC value.
+    pub fn to_raw(&self) -> u8 {
+        let lsb_ma = match self.rsns_bat {
+            SenseResistorValue::R5mOhm => 128,
+            SenseResistorValue::R10mOhm => 64,
+        };
+        // Ensure the result fits in 7 bits (0-127)
+        let raw_value = self.milliamps / lsb_ma;
+        if raw_value > 0x7F {
+            0x7F // Clamp to max 7-bit value
+        } else {
+            raw_value as u8
+        }
     }
 }
 
 /// Represents the ADCIDCHG register value in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = AdcIdchg::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct AdcIdchg(pub u16);
+pub struct AdcIdchg {
+    pub milliamps: u16,
+    pub rsns_bat: SenseResistorValue,
+}
 
 impl Default for AdcIdchg {
     fn default() -> Self {
-        Self(0)
+        Self {
+            milliamps: 0,
+            rsns_bat: SenseResistorValue::default(),
+        }
     }
 }
 
 impl AdcIdchg {
-    /// LSB value for ADCIDCHG in mA (with 5mΩ sense resistor).
-    pub const LSB_MA: u16 = 512;
-
-    /// Creates a new AdcIdchg from a 16-bit raw register value.
-    pub fn from_u16(value: u16) -> Self {
-        AdcIdchg(value) // Assuming value is already in mA
-    }
-
-    /// Creates a new AdcIdchg from an 8-bit raw register value.
-    /// Converts the 7-bit raw value to mA based on LSB.
-    pub fn from_u8(raw_value: u8) -> Self {
+    /// Creates a new AdcIdchg from a raw 7-bit ADC value and RSNS setting.
+    pub fn from_raw(raw_7bit_adc: u8, rsns_bat: SenseResistorValue) -> Self {
+        let lsb_ma = match rsns_bat {
+            SenseResistorValue::R5mOhm => 512, // 512mA/LSB for 5mΩ
+            SenseResistorValue::R10mOhm => 256, // 256mA/LSB for 10mΩ
+        };
         // ADCIDCHG is a 7-bit value (0-127)
-        AdcIdchg((raw_value as u16) * Self::LSB_MA)
+        Self {
+            milliamps: (raw_7bit_adc as u16) * lsb_ma,
+            rsns_bat,
+        }
     }
 
-    /// Converts the AdcIdchg to a 16-bit raw register value.
-    pub fn to_u16(&self) -> u16 {
-        self.0 // Assuming self.0 is already in mA
-    }
-
-    /// Converts the AdcIdchg to raw MSB and LSB register values.
-    /// Since ADCIDCHG is an 8-bit register, LSB will be 0.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0x00, (self.0 / Self::LSB_MA) as u8) // Convert mA back to raw 7-bit value
+    /// Converts the AdcIdchg to a raw 7-bit ADC value.
+    pub fn to_raw(&self) -> u8 {
+        let lsb_ma = match self.rsns_bat {
+            SenseResistorValue::R5mOhm => 512,
+            SenseResistorValue::R10mOhm => 256,
+        };
+        // Ensure the result fits in 7 bits (0-127)
+        let raw_value = self.milliamps / lsb_ma;
+        if raw_value > 0x7F {
+            0x7F // Clamp to max 7-bit value
+        } else {
+            raw_value as u8
+        }
     }
 }
 
 /// Represents the ADCIIN register value in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = AdcIin::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct AdcIin {
     pub milliamps: u16,
-    rsns_rac_is_5m_ohm: bool, // Store RSNS_RAC setting with the measurement
+    pub rsns_ac: SenseResistorValue,
 }
 
 impl Default for AdcIin {
     fn default() -> Self {
         Self {
             milliamps: 0,
-            rsns_rac_is_5m_ohm: true, // Default to 5mOhm as per typical usage
+            rsns_ac: SenseResistorValue::default(),
         }
     }
 }
 
 impl AdcIin {
-    /// Creates a new AdcIin from a 16-bit raw register value.
-    /// NOTE: This conversion assumes a specific RSNS_RAC setting (default 5mOhm).
-    /// A more robust implementation might require passing RSNS_RAC here as well.
-    pub fn from_u16(value: u16) -> Self {
-        // Assuming 5mOhm for conversion from raw value for now
-        let lsb_ma = 100;
-        AdcIin {
-            milliamps: (value >> 8) * lsb_ma, // Assuming raw 8-bit value is in MSB
-            rsns_rac_is_5m_ohm: true,         // Default to 5mOhm if not specified
-        }
-    }
-
-    /// Creates a new AdcIin from an 8-bit raw register value and RSNS_RAC setting.
-    /// Converts the 8-bit raw value to mA based on LSB determined by RSNS_RAC.
-    pub fn from_u8(raw_value: u8, rsns_rac_is_5m_ohm: bool) -> Self {
+    /// Creates a new AdcIin from an 8-bit raw ADC value and RSNS setting.
+    pub fn from_raw(raw_8bit_adc: u8, rsns_ac: SenseResistorValue) -> Self {
+        let lsb_ma = match rsns_ac {
+            SenseResistorValue::R5mOhm => 100, // 100mA/LSB for 5mΩ
+            SenseResistorValue::R10mOhm => 50,  // 50mA/LSB for 10mΩ
+        };
         // ADCIIN is an 8-bit value (0-255)
-        let lsb_ma = if rsns_rac_is_5m_ohm { 100 } else { 50 }; // 100mA for 5mOhm, 50mA for 10mOhm
-        AdcIin {
-            milliamps: (raw_value as u16) * lsb_ma,
-            rsns_rac_is_5m_ohm,
+        Self {
+            milliamps: (raw_8bit_adc as u16) * lsb_ma,
+            rsns_ac,
         }
     }
 
-    /// Converts the AdcIin to a 16-bit raw register value.
-    /// Converts the mA value back to the raw 8-bit register value based on the stored RSNS_RAC setting.
-    pub fn to_u16(&self) -> u16 {
-        let lsb_ma = if self.rsns_rac_is_5m_ohm { 100 } else { 50 };
-        (self.milliamps / lsb_ma) << 8 // Convert mA back to raw 8-bit value in MSB
-    }
-
-    /// Converts the AdcIin to raw MSB and LSB register values.
-    /// Since ADCIIN is an 8-bit register, LSB will be 0.
-    /// Converts the mA value back to the raw 8-bit register value based on the stored RSNS_RAC setting.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let lsb_ma = if self.rsns_rac_is_5m_ohm { 100 } else { 50 };
-        (0x00, (self.milliamps / lsb_ma) as u8) // Convert mA back to raw 8-bit value
+    /// Converts the AdcIin to a raw 8-bit ADC value.
+    pub fn to_raw(&self) -> u8 {
+        let lsb_ma = match self.rsns_ac {
+            SenseResistorValue::R5mOhm => 100,
+            SenseResistorValue::R10mOhm => 50,
+        };
+        // Ensure the result fits in 8 bits (0-255)
+        let raw_value = self.milliamps / lsb_ma;
+        if raw_value > 0xFF {
+            0xFF // Clamp to max 8-bit value
+        } else {
+            raw_value as u8
+        }
     }
 }
 
@@ -1186,6 +1202,19 @@ pub struct ChargeOption0 {
     pub lsb_flags: ChargeOption0Flags,
 }
 
+impl Default for ChargeOption0 {
+    fn default() -> Self {
+        // Datasheet reset E70Eh for REG0x01/00h
+        // MSB (01h) = E7h (11100111b)
+        // LSB (00h) = 0Eh (00001110b)
+        Self {
+            msb_flags: ChargeOption0MsbFlags::from_bits_truncate(0xE7),
+            lsb_flags: ChargeOption0Flags::from_bits_truncate(0x0E),
+        }
+    }
+}
+
+
 #[cfg(feature = "defmt")]
 impl defmt::Format for ChargeOption0 {
     fn format(&self, fmt: defmt::Formatter) {
@@ -1227,6 +1256,18 @@ impl ChargeOption0 {
 pub struct ChargeOption1 {
     pub msb_flags: ChargeOption1MsbFlags,
     pub lsb_flags: ChargeOption1Flags,
+}
+
+impl Default for ChargeOption1 {
+    fn default() -> Self {
+        // Datasheet reset 3300h for REG0x31/30h (Figure 8-26)
+        // MSB (31h) = 33h (00110011b)
+        // LSB (30h) = 00h (00000000b)
+        Self {
+            msb_flags: ChargeOption1MsbFlags::from_bits_truncate(0x33),
+            lsb_flags: ChargeOption1Flags::from_bits_truncate(0x00),
+        }
+    }
 }
 
 #[cfg(feature = "defmt")]
@@ -1431,5 +1472,96 @@ impl ProchotOption1 {
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.to_u16();
         (raw_value as u8, (raw_value >> 8) as u8)
+    }
+}
+
+/// Configuration for the BQ25730 charger.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Config {
+    pub rsns_bat: SenseResistorValue,
+    pub rsns_ac: SenseResistorValue,
+    pub charge_option0: ChargeOption0,
+    pub charge_option1: ChargeOption1,
+    /// Raw register value for ChargeCurrent (REG0x03/02h).
+    /// LSB (02h): bits 7:6 are D1:D0. MSB (03h): bits 4:0 are D6:D2.
+    pub charge_current: u16,
+    /// Raw register value for ChargeVoltage (REG0x05/04h).
+    /// LSB (04h): bits 7:3 are D4:D0. MSB (05h): bits 6:0 are D11:D5.
+    pub charge_voltage: u16,
+    /// Raw register value for InputVoltage (VINDPM) (REG0x0B/0Ah).
+    /// LSB (0Ah): bits 7:0 are D7:D0. MSB (0Bh): bit 5 is D8.
+    pub input_voltage: u16,
+    /// Raw register value for VSYS_MIN (REG0x0D/0Ch).
+    /// MSB (0Dh): bits 7:0 are D7:D0. LSB (0Ch) is reserved (should be 0x00).
+    pub vsys_min: u16,
+    /// Raw register value for IIN_HOST (REG0x0F/0Eh).
+    /// MSB (0Fh): bits 6:0 are D6:D0. LSB (0Eh) is reserved (should be 0x00).
+    pub iin_host: u16,
+    // TODO: Add other configurable registers as needed
+}
+
+impl Config {
+    /// Creates a new Config with datasheet-recommended default values
+    /// for a given cell count, battery sense resistor, and AC path sense resistor.
+    pub fn new(cell_count: u8, rsns_bat: SenseResistorValue, rsns_ac: SenseResistorValue) -> Self {
+        let mut co1_msb = ChargeOption1MsbFlags::from_bits_truncate(0x33); // Start with datasheet reset for MSB of ChargeOption1 (0x31h)
+                                                                          // Default for 0x31h is 0x33. Bit 2 (RSNS_RSR) = 1 (5mOhm), Bit 3 (RSNS_RAC) = 1 (5mOhm).
+                                                                          // If resistor is 10mOhm, clear the bit. If 5mOhm, set the bit.
+
+        if rsns_bat == SenseResistorValue::R5mOhm {
+            co1_msb.insert(ChargeOption1MsbFlags::RSNS_RSR);
+        } else { // R10mOhm
+            co1_msb.remove(ChargeOption1MsbFlags::RSNS_RSR);
+        }
+
+        if rsns_ac == SenseResistorValue::R5mOhm {
+            co1_msb.insert(ChargeOption1MsbFlags::RSNS_RAC);
+        } else { // R10mOhm
+            co1_msb.remove(ChargeOption1MsbFlags::RSNS_RAC);
+        }
+
+        Self {
+            rsns_bat,
+            rsns_ac,
+            charge_option0: ChargeOption0::default(), // Uses datasheet reset E70Eh
+            charge_option1: ChargeOption1 {
+                msb_flags: co1_msb,
+                lsb_flags: ChargeOption1Flags::from_bits_truncate(0x00), // Datasheet reset for LSB of ChargeOption1 (0x30h) is 0x00
+            },
+            charge_current: 0x0000, // Default 0A.
+            charge_voltage: match cell_count {
+                1 => 0x1068, // 4.2V.
+                2 => 0x20D0, // 8.4V.
+                3 => 0x3138, // 12.6V.
+                4 => 0x41A0, // 16.8V.
+                5 => 0x5208, // 21.0V.
+                _ => 0x41A0, // Default to 4S
+            },
+            input_voltage: 0x00C8, // Default VINDPM 16V (raw 0x00C8 based on (16000-3200)/64 = 200 = 0xC8 for LSB, MSB D8=0)
+                                   // The register value is LSB=0xC8, MSB=0x00 (bit 5 for D8) -> 0x00C8
+            vsys_min: match cell_count {
+                // VSYS_MIN is 8 bits in MSB (0x0D), LSB (0x0C) is 0x00.
+                1 => 0x2400, // 3.6V. Raw MSB 0x24.
+                2 => 0x4200, // 6.6V. Raw MSB 0x42.
+                3 => 0x5C00, // 9.2V. Raw MSB 0x5C.
+                4 => 0x7B00, // 12.3V. Raw MSB 0x7B.
+                5 => 0x9A00, // 15.4V. Raw MSB 0x9A.
+                _ => 0x7B00, // Default to 4S
+            },
+            iin_host: match rsns_ac {
+                // IIN_HOST is 7 bits in MSB (0x0F), LSB (0x0E) is 0x00.
+                // For 5mOhm, 3.2A. (3200-100)/100 = 31 = 0x1F. So MSB=0x1F. Value = 0x1F00
+                // For 10mOhm, 3.25A. (3250-50)/50 = 64 = 0x40. So MSB=0x40. Value = 0x4000
+                SenseResistorValue::R5mOhm => 0x1F00,
+                SenseResistorValue::R10mOhm => 0x4000,
+            },
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config::new(4, SenseResistorValue::default(), SenseResistorValue::default())
     }
 }

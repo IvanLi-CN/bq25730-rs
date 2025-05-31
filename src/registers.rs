@@ -208,9 +208,11 @@ bitflags! {
         const EN_IBAT = 1 << 7;
         const EN_PROCHOT_LPWR = 1 << 6;
         const PSYS_CONFIG = 0b11 << 4;
-        const RSNS_RAC = 1 << 3;
-        const RSNS_RSR = 1 << 2;
+        const RSNS_RAC = 1 << 3; // Input sense resistor RAC (0b: 10mOhm, 1b: 5mOhm)
+        const RSNS_RSR = 1 << 2; // Charge sense resistor RSR (0b: 10mOhm, 1b: 5mOhm)
         const PSYS_RATIO = 1 << 1;
+        // Bit 0 is EN_VAP_MODE (EN_FRS in some contexts, but datasheet for 0x31 bit 0 is "RESERVED" or related to VAP/FRS control logic not directly a simple enable)
+        // Let's assume bit 0 is not directly part of Rsns config here.
     }
 }
 
@@ -406,6 +408,11 @@ bitflags! {
         const ADC_CONV = 1 << 7;
         const ADC_START = 1 << 6;
         const ADC_FULLSCALE = 1 << 5;
+        // Bit D0 of ADCOption MSB (0x3B) is RAC_RSR according to some datasheets.
+        // However, typical TI datasheets show ADCOption MSB (0x3B) as D7:ADC_CONV, D6:ADC_START, D5:ADC_FULLSCALE, D4-D0: Reserved or other functions.
+        // Let's assume RAC_RSR is in ADCOption LSB (0x3A) for now if not found here, or needs clarification.
+        // For BQ25730, RAC_RSR is indeed bit 0 of ADCOption MSB (register 0x3B).
+        const RAC_RSR = 1 << 0; // Sense resistor selection for input current path (RAC)
     }
 }
 

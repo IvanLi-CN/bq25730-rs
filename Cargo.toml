@@ -52,6 +52,6 @@ std = ["binrw/std"]
 [workspace]
 members = ["examples/stm32g4", "examples/stm32g0"]
 
-# [dev-dependencies.bq25730-async-rs]
-# path = "."
-# features = ["async", "defmt", "binrw"]
+[dev-dependencies.bq25730-async-rs]
+path = "."
+features = ["async", "defmt", "binrw", "std"]
