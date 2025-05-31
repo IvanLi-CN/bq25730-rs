@@ -23,6 +23,15 @@ pub struct ChargerStatus {
     pub fault_flags: ChargerStatusFaultFlags,
 }
 
+impl Default for ChargerStatus {
+    fn default() -> Self {
+        Self {
+            status_flags: ChargerStatusFlags::empty(),
+            fault_flags: ChargerStatusFaultFlags::empty(),
+        }
+    }
+}
+
 #[cfg(feature = "defmt")]
 impl defmt::Format for ChargerStatus {
     fn format(&self, fmt: defmt::Formatter) {
@@ -181,6 +190,16 @@ pub struct ProchotStatus {
     pub msb_flags: ProchotStatusMsbFlags,
     pub lsb_flags: ProchotStatusFlags,
     pub prochot_width: u8,
+}
+
+impl Default for ProchotStatus {
+    fn default() -> Self {
+        Self {
+            msb_flags: ProchotStatusMsbFlags::empty(),
+            lsb_flags: ProchotStatusFlags::empty(),
+            prochot_width: 0,
+        }
+    }
 }
 
 impl ProchotStatus {
@@ -657,6 +676,21 @@ pub struct AdcMeasurements {
     pub cmpin: AdcCmpin,
 }
 
+impl Default for AdcMeasurements {
+    fn default() -> Self {
+        Self {
+            vbat: AdcVbat::default(),
+            vsys: AdcVsys::default(),
+            ichg: AdcIchg::default(),
+            idchg: AdcIdchg::default(),
+            iin: AdcIin::default(),
+            psys: AdcPsys::default(),
+            vbus: AdcVbus::default(),
+            cmpin: AdcCmpin::default(),
+        }
+    }
+}
+
 #[cfg(feature = "defmt")]
 impl defmt::Format for AdcMeasurements {
     fn format(&self, fmt: defmt::Formatter) {
@@ -672,6 +706,12 @@ impl defmt::Format for AdcMeasurements {
 #[cfg_attr(feature = "binrw", br(map = AdcCmpin::from_u16))]
 #[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct AdcCmpin(pub u16);
+
+impl Default for AdcCmpin {
+    fn default() -> Self {
+        Self(0)
+    }
+}
 
 impl AdcCmpin {
     /// LSB value for ADCCMPIN in mV (with ADC_FULLSCALE=1b).
@@ -710,6 +750,12 @@ impl AdcCmpin {
 #[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct AdcIchg(pub u16);
 
+impl Default for AdcIchg {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 impl AdcIchg {
     /// LSB value for ADCICHG in mA (with 5mΩ sense resistor).
     pub const LSB_MA: u16 = 128;
@@ -745,6 +791,12 @@ impl AdcIchg {
 #[cfg_attr(feature = "binrw", br(map = AdcIdchg::from_u16))]
 #[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct AdcIdchg(pub u16);
+
+impl Default for AdcIdchg {
+    fn default() -> Self {
+        Self(0)
+    }
+}
 
 impl AdcIdchg {
     /// LSB value for ADCIDCHG in mA (with 5mΩ sense resistor).
@@ -783,6 +835,15 @@ impl AdcIdchg {
 pub struct AdcIin {
     pub milliamps: u16,
     rsns_rac_is_5m_ohm: bool, // Store RSNS_RAC setting with the measurement
+}
+
+impl Default for AdcIin {
+    fn default() -> Self {
+        Self {
+            milliamps: 0,
+            rsns_rac_is_5m_ohm: true, // Default to 5mOhm as per typical usage
+        }
+    }
 }
 
 impl AdcIin {
@@ -833,6 +894,12 @@ impl AdcIin {
 #[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct AdcPsys(pub u16);
 
+impl Default for AdcPsys {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 impl AdcPsys {
     /// LSB value for ADCPSYS (assuming 12mV/LSB when ADC_FULLSCALE=1b).
     /// This might represent a voltage proportional to power.
@@ -870,6 +937,12 @@ impl AdcPsys {
 #[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
 pub struct AdcVbus(pub u16);
 
+impl Default for AdcVbus {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 impl AdcVbus {
     /// LSB value for ADCVBUS in mV.
     pub const LSB_MV: u16 = 96;
@@ -903,6 +976,12 @@ impl AdcVbus {
 /// Represents the ADCVBAT register value in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct AdcVbat(pub u16);
+
+impl Default for AdcVbat {
+    fn default() -> Self {
+        Self(0)
+    }
+}
 
 impl AdcVbat {
     /// LSB value for ADCVBAT in mV.
@@ -977,6 +1056,12 @@ impl BinWrite for AdcVbat {
 /// Represents the ADCVSYS register value in mV.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct AdcVsys(pub u16);
+
+impl Default for AdcVsys {
+    fn default() -> Self {
+        Self(0)
+    }
+}
 
 impl AdcVsys {
     /// LSB value for ADCVSYS in mV.
