@@ -284,27 +284,18 @@ where
             }
         };
 
-        // Read each 8-bit ADC register individually
-        let psys_raw = self.read_registers(Register::ADCPSYS, 1).await?;
-        let vbus_raw = self.read_registers(Register::ADCVBUS, 1).await?;
-        let idchg_raw = self.read_registers(Register::ADCIDCHG, 1).await?;
-        let ichg_raw = self.read_registers(Register::ADCICHG, 1).await?;
-        let cmpin_raw = self.read_registers(Register::ADCCMPIN, 1).await?;
-        let iin_raw = self.read_registers(Register::ADCIIN, 1).await?;
-        let vbat_raw = self.read_registers(Register::ADCVBAT, 2).await?; // Reads 0x2C (LSB), 0x2D (MSB)
-        // ADCVSYS data is in register 0x2D (which is ADCVBAT_MSB).
-        // So, vsys_msb_raw is the second byte read for ADCVBAT.
-        let vsys_msb_raw = vbat_raw.as_ref()[1]; // This is the content of 0x2D
+        // Read all ADC registers in one go (0x26 to 0x2D, 8 bytes)
+        let adc_data_raw = self.read_registers(Register::ADCPSYS, 8).await?;
 
         Ok(AdcMeasurements {
-            vbat: AdcVbat::from_register_value(vbat_raw.as_ref()[0], vbat_raw.as_ref()[1], offset_mv), // Use from_register_value
-            vsys: AdcVsys::from_register_value(0, vsys_msb_raw, offset_mv), // LSB for VSYS ADC is not used from a separate reg
-            ichg: AdcIchg::from_u8(ichg_raw[0]),
-            idchg: AdcIdchg::from_u8(idchg_raw[0]),
-            iin: AdcIin::from_u8(iin_raw[0], self.rsns_rac_is_5m_ohm),
-            psys: AdcPsys::from_u8(psys_raw[0]),
-            vbus: AdcVbus::from_u8(vbus_raw[0]),
-            cmpin: AdcCmpin::from_u8(cmpin_raw[0]),
+            vbat: AdcVbat::from_register_value(adc_data_raw.as_ref()[6], adc_data_raw.as_ref()[7], offset_mv),
+            vsys: AdcVsys::from_register_value(0, adc_data_raw.as_ref()[7], offset_mv), // LSB for VSYS ADC is not used from a separate reg
+            ichg: AdcIchg::from_u8(adc_data_raw.as_ref()[3]),  // ADCICHG is at offset 3 (0x29) from ADCPSYS (0x26)
+            idchg: AdcIdchg::from_u8(adc_data_raw.as_ref()[2]), // ADCIDCHG is at offset 2 (0x28)
+            iin: AdcIin::from_u8(adc_data_raw.as_ref()[5], self.rsns_rac_is_5m_ohm), // ADCIIN is at offset 5 (0x2B)
+            psys: AdcPsys::from_u8(adc_data_raw.as_ref()[0]),  // ADCPSYS is at offset 0 (0x26)
+            vbus: AdcVbus::from_u8(adc_data_raw.as_ref()[1]),  // ADCVBUS is at offset 1 (0x27)
+            cmpin: AdcCmpin::from_u8(adc_data_raw.as_ref()[4]), // ADCCMPIN is at offset 4 (0x2A)
         })
     }
 
