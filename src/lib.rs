@@ -22,21 +22,22 @@ use crate::data_types::{
     AdcVbat,
     AdcVbus,
     AdcVsys,
-    ChargeCurrent,
+    // ChargeCurrentSetting, // Updated type
     ChargeOption0,
     ChargeOption1,
     ChargeOption2,
     ChargeOption3,
-    ChargeVoltage,
+    ChargeOption4,
+    // ChargeVoltageSetting, // Updated type
     ChargerStatus,
     IinDpm,
-    IinHost,
-    InputVoltage,
-    OtgCurrent,
-    OtgVoltage,
+    VminActiveProtection,
+    // IinHostSetting, // Updated type - unused direct import
+    // InputVoltageSetting, // Updated type - unused direct import
+    // OtgCurrentSetting, // Updated type - unused direct import
+    // OtgVoltageSetting, // Refactored - unused direct import
     ProchotStatus,
-    VsysMin,
-    // Config, RsnsAc, RsnsBat are handled by the pub use below
+    // VsysMinSetting, // Updated type - unused direct import
 };
 use crate::registers::{ChargeOption1Flags, ChargerStatusFaultFlags, ChargerStatusFlags};
 pub use data_types::{Config, SenseResistorValue};
@@ -223,21 +224,27 @@ where
 {
     /// Initializes the BQ25730 charger using the provided configuration.
     pub async fn init(&mut self) -> Result<(), Error<E>> {
-        // Write ChargeOption0, ChargeCurrent, and ChargeVoltage (Registers 0x00-0x05)
+        // Write ChargeOption0, ChargeCurrent, ChargeVoltage, OTGVoltage, and OTGCurrent (Registers 0x00-0x09)
         // These are contiguous registers.
         let charge_option0_bytes = self.config.charge_option0.to_msb_lsb_bytes();
-        let charge_current_bytes = self.config.charge_current.to_le_bytes(); // Assuming to_le_bytes() is appropriate, or use to_msb_lsb_bytes() if available and needed for consistency
-        let charge_voltage_bytes = self.config.charge_voltage.to_le_bytes(); // Assuming to_le_bytes() is appropriate
+        let (cc_lsb, cc_msb) = self.config.charge_current.to_msb_lsb_bytes();
+        let (cv_lsb, cv_msb) = self.config.charge_voltage.to_msb_lsb_bytes();
+        let (otg_v_lsb, otg_v_msb) = self.config.otg_voltage.to_msb_lsb_bytes();
+        let (otg_c_lsb, otg_c_msb) = self.config.otg_current.to_msb_lsb_bytes();
 
         self.write_registers(
             Register::ChargeOption0,
             &[
-                charge_option0_bytes.0,  // ChargeOption0 LSB
-                charge_option0_bytes.1,  // ChargeOption0 MSB
-                charge_current_bytes[0], // ChargeCurrent LSB
-                charge_current_bytes[1], // ChargeCurrent MSB
-                charge_voltage_bytes[0], // ChargeVoltage LSB
-                charge_voltage_bytes[1], // ChargeVoltage MSB
+                charge_option0_bytes.0,  // ChargeOption0 LSB (0x00)
+                charge_option0_bytes.1,  // ChargeOption0 MSB (0x01)
+                cc_lsb,                  // ChargeCurrent LSB (0x02)
+                cc_msb,                  // ChargeCurrent MSB (0x03)
+                cv_lsb,                  // ChargeVoltage LSB (0x04)
+                cv_msb,                  // ChargeVoltage MSB (0x05)
+                otg_v_lsb,               // OTGVoltage LSB (0x06)
+                otg_v_msb,               // OTGVoltage MSB (0x07)
+                otg_c_lsb,               // OTGCurrent LSB (0x08) - Should be 0x00
+                otg_c_msb,               // OTGCurrent MSB (0x09)
             ],
         )
         .await?;
@@ -249,21 +256,42 @@ where
 
         // Group 2: InputVoltage, VsysMin, IinHost (Registers 0x0A-0x0F)
         // These are contiguous registers.
-        let input_voltage_bytes = self.config.input_voltage.to_le_bytes();
-        let vsys_min_bytes = self.config.vsys_min.to_le_bytes();
-        let iin_host_bytes = self.config.iin_host.to_le_bytes();
+        let (iv_lsb, iv_msb) = self.config.input_voltage.to_msb_lsb_bytes();
+        let (vm_lsb, vm_msb) = self.config.vsys_min.to_msb_lsb_bytes();
+        let (ih_lsb, ih_msb) = self.config.iin_host.to_msb_lsb_bytes(self.config.rsns_ac);
         self.write_registers(
-            Register::InputVoltage,
+            Register::InputVoltage, // Starts at 0x0A
             &[
-                input_voltage_bytes[0], // InputVoltage LSB
-                input_voltage_bytes[1], // InputVoltage MSB
-                vsys_min_bytes[0],      // VsysMin LSB
-                vsys_min_bytes[1],      // VsysMin MSB
-                iin_host_bytes[0],      // IinHost LSB
-                iin_host_bytes[1],      // IinHost MSB
+                iv_lsb,                 // InputVoltage LSB (0x0A)
+                iv_msb,                 // InputVoltage MSB (0x0B)
+                vm_lsb,                 // VsysMin LSB (0x0C) - Should be 0x00
+                vm_msb,                 // VsysMin MSB (0x0D)
+                ih_lsb,                 // IinHost LSB (0x0E)
+                ih_msb,                 // IinHost MSB (0x0F)
             ],
         )
         .await?;
+
+        // Write ChargeOption3 (Registers 0x34-0x35)
+        let (lsb_co3, msb_co3) = self.config.charge_option3.to_msb_lsb_bytes();
+        self.write_registers(Register::ChargeOption3, &[lsb_co3, msb_co3])
+            .await?;
+
+        // Write ChargeOption4 and VminActiveProtection (Registers 0x3C-0x3F)
+        // These are contiguous registers.
+        let (lsb_co4, msb_co4) = self.config.charge_option4.to_msb_lsb_bytes();
+        let (lsb_vmin, msb_vmin) = self.config.vmin_active_protection.to_msb_lsb_bytes();
+        self.write_registers(
+            Register::ChargeOption4,
+            &[
+                lsb_co4,    // ChargeOption4 LSB (0x3C)
+                msb_co4,    // ChargeOption4 MSB (0x3D)
+                lsb_vmin,   // VMINActiveProtection LSB (0x3E)
+                msb_vmin,   // VMINActiveProtection MSB (0x3F)
+            ],
+        )
+        .await?;
+
 
         // Clear SYSOVP and VSYS_UVP faults from ChargerStatus
         let mut charger_status = self.read_charger_status().await?;
@@ -362,126 +390,110 @@ where
         ])))
     }
 
-    /// Reads the Charge Current register and returns the value in mA.
-    pub async fn read_charge_current(&mut self) -> Result<ChargeCurrent, Error<E>> {
-        let lsb_byte = self.read_register(Register::ChargeCurrent).await?;
-        let msb_byte = self.read_register(Register::ChargeCurrentMsb).await?;
-        let d1_d0 = (lsb_byte >> 6) & 0x03;
-        let d6_d2 = msb_byte & 0x1F;
-        let raw_7bit = (d6_d2 << 2) | d1_d0;
-        Ok(ChargeCurrent::from_raw(raw_7bit, self.config.rsns_bat))
+    /// Reads the Charge Current register and returns the setting.
+    pub async fn read_charge_current_setting(&mut self) -> Result<data_types::ChargeCurrentSetting, Error<E>> {
+        let raw_value_bytes = self.read_registers(Register::ChargeCurrent, 2).await?;
+        let raw_value = u16::from_le_bytes([raw_value_bytes.as_ref()[0], raw_value_bytes.as_ref()[1]]);
+        Ok(data_types::ChargeCurrentSetting::from_raw(raw_value, self.config.rsns_bat))
     }
 
-    /// Writes the Charge Current register with the value in mA.
-    pub async fn set_charge_current(&mut self, current: ChargeCurrent) -> Result<(), Error<E>> {
-        let raw_7bit = current.to_raw();
-        let d1_d0 = raw_7bit & 0x03;
-        let d6_d2 = (raw_7bit >> 2) & 0x1F;
-        let mut lsb_val = self.read_register(Register::ChargeCurrent).await?;
-        lsb_val &= !(0x03 << 6);
-        lsb_val |= d1_d0 << 6;
-        self.write_register(Register::ChargeCurrent, lsb_val)
-            .await?;
-        let mut msb_val = self.read_register(Register::ChargeCurrentMsb).await?;
-        msb_val &= !0x1F;
-        msb_val |= d6_d2;
-        self.write_register(Register::ChargeCurrentMsb, msb_val)
+    /// Writes the Charge Current register with the setting.
+    pub async fn set_charge_current_setting(&mut self, current: data_types::ChargeCurrentSetting) -> Result<(), Error<E>> {
+        let raw_value = current.to_raw();
+        self.write_registers(Register::ChargeCurrent, &raw_value.to_le_bytes())
             .await
     }
 
-    /// Reads the Charge Voltage register and returns the value in mV.
-    pub async fn read_charge_voltage(&mut self) -> Result<ChargeVoltage, Error<E>> {
-        let raw_voltage = self.read_registers(Register::ChargeVoltage, 2).await?;
-        Ok(ChargeVoltage::from_u16(u16::from_le_bytes([
-            raw_voltage.as_ref()[0],
-            raw_voltage.as_ref()[1],
-        ])))
+    /// Reads the Charge Voltage register and returns the setting.
+    pub async fn read_charge_voltage_setting(&mut self) -> Result<data_types::ChargeVoltageSetting, Error<E>> {
+        let raw_voltage_bytes = self.read_registers(Register::ChargeVoltage, 2).await?;
+        let raw_voltage = u16::from_le_bytes([raw_voltage_bytes.as_ref()[0], raw_voltage_bytes.as_ref()[1]]);
+        Ok(data_types::ChargeVoltageSetting::from_raw(raw_voltage, None))
     }
 
-    /// Writes the Charge Voltage register with the value in mV.
-    pub async fn set_charge_voltage(&mut self, voltage: ChargeVoltage) -> Result<(), Error<E>> {
-        let raw_value = voltage.to_u16();
+    /// Writes the Charge Voltage register with the setting.
+    pub async fn set_charge_voltage_setting(&mut self, voltage: data_types::ChargeVoltageSetting) -> Result<(), Error<E>> {
+        let raw_value = voltage.to_raw();
         self.write_registers(Register::ChargeVoltage, &raw_value.to_le_bytes())
             .await
     }
 
-    /// Reads the OTG Voltage register and returns the value in mV.
-    pub async fn read_otg_voltage(&mut self) -> Result<OtgVoltage, Error<E>> {
-        let raw_voltage = self.read_registers(Register::OTGVoltage, 2).await?;
-        Ok(OtgVoltage::from_u16(u16::from_le_bytes([
-            raw_voltage.as_ref()[0],
-            raw_voltage.as_ref()[1],
-        ])))
+    /// Reads the OTG Voltage register and returns the setting.
+    pub async fn read_otg_voltage_setting(&mut self) -> Result<data_types::OtgVoltageSetting, Error<E>> {
+        let raw_voltage_bytes = self.read_registers(Register::OTGVoltage, 2).await?;
+        let raw_voltage = u16::from_le_bytes([raw_voltage_bytes.as_ref()[0], raw_voltage_bytes.as_ref()[1]]);
+        Ok(data_types::OtgVoltageSetting::from_raw(raw_voltage))
     }
 
-    /// Writes the OTG Voltage register with the value in mV.
-    pub async fn set_otg_voltage(&mut self, voltage: OtgVoltage) -> Result<(), Error<E>> {
-        let raw_value = voltage.to_u16();
+    /// Writes the OTG Voltage register with the setting.
+    pub async fn set_otg_voltage_setting(&mut self, voltage: data_types::OtgVoltageSetting) -> Result<(), Error<E>> {
+        let raw_value = voltage.to_raw();
         self.write_registers(Register::OTGVoltage, &raw_value.to_le_bytes())
             .await
     }
 
-    /// Reads the OTG Current register and returns the value in mA.
-    pub async fn read_otg_current(&mut self) -> Result<OtgCurrent, Error<E>> {
+    /// Reads the OTG Current register (REG0x09/08h) and returns the setting.
+    /// REG0x08h (LSB) is reserved. REG0x09h (MSB) bits 6:0 define the current.
+    pub async fn read_otg_current_setting(&mut self) -> Result<data_types::OtgCurrentSetting, Error<E>> {
         let msb_byte = self.read_register(Register::OTGCurrentMsb).await?;
-        let raw_7bit = msb_byte & 0x7F;
-        Ok(OtgCurrent::from_raw(raw_7bit, self.config.rsns_bat))
+        let raw_7bit = msb_byte & 0x7F; // Mask to get D6-D0
+        Ok(data_types::OtgCurrentSetting::from_raw(raw_7bit, self.config.rsns_bat))
     }
 
-    /// Writes the OTG Current register with the value in mA.
-    pub async fn set_otg_current(&mut self, current: OtgCurrent) -> Result<(), Error<E>> {
-        let raw_7bit = current.to_raw();
+    /// Writes the OTG Current register (REG0x09/08h) with the setting.
+    /// REG0x08h (LSB) is reserved and written as 0x00.
+    /// REG0x09h (MSB) bits 6:0 are set based on the current setting.
+    pub async fn set_otg_current_setting(&mut self, current: data_types::OtgCurrentSetting) -> Result<(), Error<E>> {
+        let raw_7bit_current = current.to_raw();
+        // Read the current MSB value to preserve other bits (e.g., bit 7 if it's used for something else, though datasheet says reserved)
         let mut msb_val = self.read_register(Register::OTGCurrentMsb).await?;
-        msb_val &= !0x7F;
-        msb_val |= raw_7bit & 0x7F;
-        self.write_register(Register::OTGCurrentMsb, msb_val).await
+        msb_val &= !0x7F; // Clear bits D6-D0
+        msb_val |= raw_7bit_current & 0x7F; // Set new current bits
+
+        // Write both LSB (0x00) and MSB
+        self.write_registers(Register::OTGCurrent, &[0x00, msb_val]).await
     }
 
-    /// Reads the Input Voltage register and returns the value in mV.
-    pub async fn read_input_voltage(&mut self) -> Result<InputVoltage, Error<E>> {
-        let raw_voltage = self.read_registers(Register::InputVoltage, 2).await?;
-        Ok(InputVoltage::from_u16(u16::from_le_bytes([
-            raw_voltage.as_ref()[0],
-            raw_voltage.as_ref()[1],
-        ])))
+    /// Reads the Input Voltage (VINDPM) register and returns the setting.
+    pub async fn read_input_voltage_setting(&mut self) -> Result<data_types::InputVoltageSetting, Error<E>> {
+        let raw_voltage_bytes = self.read_registers(Register::InputVoltage, 2).await?;
+        let raw_voltage = u16::from_le_bytes([raw_voltage_bytes.as_ref()[0], raw_voltage_bytes.as_ref()[1]]);
+        Ok(data_types::InputVoltageSetting::from_raw(raw_voltage))
     }
-    /// Writes the Input Voltage register with the value in mV.
-    pub async fn set_input_voltage(&mut self, voltage: InputVoltage) -> Result<(), Error<E>> {
-        let raw_value = voltage.to_u16();
+
+    /// Writes the Input Voltage (VINDPM) register with the setting.
+    pub async fn set_input_voltage_setting(&mut self, voltage: data_types::InputVoltageSetting) -> Result<(), Error<E>> {
+        let raw_value = voltage.to_raw();
         self.write_registers(Register::InputVoltage, &raw_value.to_le_bytes())
             .await
     }
 
-    /// Reads the Minimum System Voltage register and returns the value in mV.
-    pub async fn read_vsys_min(&mut self) -> Result<VsysMin, Error<E>> {
-        let raw_voltage = self.read_registers(Register::VsysMin, 2).await?;
-        Ok(VsysMin::from_u16(u16::from_le_bytes([
-            raw_voltage[0],
-            raw_voltage[1],
-        ])))
+    /// Reads the Minimum System Voltage (VSYS_MIN) register and returns the setting.
+    pub async fn read_vsys_min_setting(&mut self) -> Result<data_types::VsysMinSetting, Error<E>> {
+        let raw_voltage_bytes = self.read_registers(Register::VsysMin, 2).await?;
+        let raw_voltage = u16::from_le_bytes([raw_voltage_bytes.as_ref()[0], raw_voltage_bytes.as_ref()[1]]);
+        Ok(data_types::VsysMinSetting::from_raw(raw_voltage))
     }
 
-    /// Writes the Minimum System Voltage register with the value in mV.
-    pub async fn set_vsys_min(&mut self, voltage: VsysMin) -> Result<(), Error<E>> {
-        let raw_value = voltage.to_u16();
+    /// Writes the Minimum System Voltage (VSYS_MIN) register with the setting.
+    pub async fn set_vsys_min_setting(&mut self, voltage: data_types::VsysMinSetting) -> Result<(), Error<E>> {
+        let raw_value = voltage.to_raw();
         self.write_registers(Register::VsysMin, &raw_value.to_le_bytes())
             .await
     }
 
-    /// Reads the IIN_HOST register and returns the value in mA.
-    pub async fn read_iin_host(&mut self) -> Result<IinHost, Error<E>> {
-        let msb_byte = self.read_register(Register::IinHostMsb).await?;
-        let raw_7bit = msb_byte & 0x7F;
-        Ok(IinHost::from_raw(raw_7bit, self.config.rsns_ac))
+    /// Reads the IIN_HOST register and returns the setting.
+    pub async fn read_iin_host_setting(&mut self) -> Result<data_types::IinHostSetting, Error<E>> {
+        let raw_value_bytes = self.read_registers(Register::IinHost, 2).await?;
+        let raw_value = u16::from_le_bytes([raw_value_bytes.as_ref()[0], raw_value_bytes.as_ref()[1]]);
+        Ok(data_types::IinHostSetting::from_raw(raw_value, self.config.rsns_ac))
     }
 
-    /// Writes the IIN_HOST register with the value in mA.
-    pub async fn set_iin_host(&mut self, current: IinHost) -> Result<(), Error<E>> {
-        let raw_7bit = current.to_raw();
-        let mut msb_val = self.read_register(Register::IinHostMsb).await?;
-        msb_val &= !0x7F;
-        msb_val |= raw_7bit & 0x7F;
-        self.write_register(Register::IinHostMsb, msb_val).await
+    /// Writes the IIN_HOST register with the setting.
+    pub async fn set_iin_host_setting(&mut self, current: data_types::IinHostSetting) -> Result<(), Error<E>> {
+        let raw_value = current.to_raw(self.config.rsns_ac);
+        self.write_registers(Register::IinHost, &raw_value.to_le_bytes())
+            .await
     }
 
     /// Reads the IIN_DPM register and returns the value in mA.
@@ -564,6 +576,22 @@ where
         ])))
     }
 
+    /// Sets the ChargeOption4 register.
+    pub async fn set_charge_option4(&mut self, options: ChargeOption4) -> Result<(), Error<E>> {
+        let raw_value = options.to_u16();
+        self.write_registers(Register::ChargeOption4, &raw_value.to_le_bytes())
+            .await
+    }
+
+    /// Reads the ChargeOption4 register.
+    pub async fn read_charge_option4(&mut self) -> Result<ChargeOption4, Error<E>> {
+        let raw_options = self.read_registers(Register::ChargeOption4, 2).await?;
+        Ok(ChargeOption4::from_u16(u16::from_le_bytes([
+            raw_options.as_ref()[0],
+            raw_options.as_ref()[1],
+        ])))
+    }
+
     /// Enters ship mode.
     /// This function sets the SHIP_MODE bit in ChargeOption1 register.
     pub async fn enter_ship_mode(&mut self) -> Result<(), Error<E>> {
@@ -577,5 +605,107 @@ where
         self.set_charge_option1(charge_option1).await?;
 
         Ok(())
+    }
+
+    /// Sets the VminActiveProtection register.
+    pub async fn set_vmin_active_protection(
+        &mut self,
+        options: VminActiveProtection,
+    ) -> Result<(), Error<E>> {
+        let raw_value = options.to_u16();
+        self.write_registers(Register::VMINActiveProtection, &raw_value.to_le_bytes())
+            .await
+    }
+
+    /// Reads the VminActiveProtection register.
+    pub async fn read_vmin_active_protection(&mut self) -> Result<VminActiveProtection, Error<E>> {
+        let raw_options = self
+            .read_registers(Register::VMINActiveProtection, 2)
+            .await?;
+        Ok(VminActiveProtection::from_u16(u16::from_le_bytes([
+            raw_options.as_ref()[0],
+            raw_options.as_ref()[1],
+        ])))
+    }
+
+    /// Reads the VminActiveProtection settings as a structured type.
+    pub async fn read_vmin_active_protection_settings(
+        &mut self,
+    ) -> Result<VminActiveProtection, Error<E>> {
+        self.read_vmin_active_protection().await
+    }
+
+    /// Sets the VminActiveProtection settings from a structured type.
+    pub async fn set_vmin_active_protection_settings(
+        &mut self,
+        settings: VminActiveProtection,
+    ) -> Result<(), Error<E>> {
+        self.set_vmin_active_protection(settings).await
+    }
+
+    /// Sets the VBUS_VAP_TH value from voltage in mV.
+    pub async fn set_vbus_vap_th_mv(&mut self, voltage_mv: u16) -> Result<(), Error<E>> {
+        let mut vmin_prot = self.read_vmin_active_protection().await?;
+        vmin_prot.set_vbus_vap_th_mv(voltage_mv);
+        self.set_vmin_active_protection(vmin_prot).await
+    }
+
+    /// Gets the VBUS_VAP_TH value in mV.
+    pub async fn get_vbus_vap_th_mv(&mut self) -> Result<u16, Error<E>> {
+        let vmin_prot = self.read_vmin_active_protection().await?;
+        Ok(vmin_prot.vbus_vap_th_mv())
+    }
+
+    /// Sets the VSYS_TH2 value from voltage in mV (assuming 2s-5s mode).
+    pub async fn set_vsys_th2_mv(&mut self, voltage_mv: u16) -> Result<(), Error<E>> {
+        let mut vmin_prot = self.read_vmin_active_protection().await?;
+        vmin_prot.set_vsys_th2_mv(voltage_mv);
+        self.set_vmin_active_protection(vmin_prot).await
+    }
+
+    /// Gets the VSYS_TH2 value in mV (assuming 2s-5s mode).
+    pub async fn get_vsys_th2_mv(&mut self) -> Result<u16, Error<E>> {
+        let vmin_prot = self.read_vmin_active_protection().await?;
+        Ok(vmin_prot.vsys_th2_mv())
+    }
+
+    /// Enables the EN_VSYSTH2_FOLLOW_VSYSTH1 bit.
+    pub async fn enable_vsysth2_follow_vsysth1(&mut self) -> Result<(), Error<E>> {
+        let mut vmin_prot = self.read_vmin_active_protection().await?;
+        vmin_prot.set_en_vsysth2_follow_vsysth1(true);
+        self.set_vmin_active_protection(vmin_prot).await
+    }
+
+    /// Disables the EN_VSYSTH2_FOLLOW_VSYSTH1 bit.
+    pub async fn disable_vsysth2_follow_vsysth1(&mut self) -> Result<(), Error<E>> {
+        let mut vmin_prot = self.read_vmin_active_protection().await?;
+        vmin_prot.set_en_vsysth2_follow_vsysth1(false);
+        self.set_vmin_active_protection(vmin_prot).await
+    }
+
+    /// Checks if the EN_VSYSTH2_FOLLOW_VSYSTH1 bit is enabled.
+    pub async fn is_vsysth2_follow_vsysth1_enabled(&mut self) -> Result<bool, Error<E>> {
+        let vmin_prot = self.read_vmin_active_protection().await?;
+        Ok(vmin_prot.en_vsysth2_follow_vsysth1())
+    }
+
+    /// Enables the EN_FRS bit.
+    pub async fn enable_frs(&mut self) -> Result<(), Error<E>> {
+        let mut vmin_prot = self.read_vmin_active_protection().await?;
+        vmin_prot.set_en_frs(true);
+        self.set_vmin_active_protection(vmin_prot).await
+    }
+
+    /// Disables the EN_FRS bit.
+    pub async fn disable_frs(&mut self) -> Result<(), Error<E>> {
+        let mut vmin_prot = self.read_vmin_active_protection().await?;
+        vmin_prot.set_en_frs(false);
+        self.set_vmin_active_protection(vmin_prot).await
+    }
+
+    /// Checks if the EN_FRS bit is enabled.
+    pub async fn is_frs_enabled(&mut self) -> Result<bool, Error<E>> {
+        let vmin_prot = self.read_vmin_active_protection().await?;
+        Ok(vmin_prot.en_frs())
     }
 }

@@ -6,9 +6,10 @@ use defmt::Format;
 use crate::registers::{
     AdcOptionFlags, AdcOptionMsbFlags, ChargeOption0Flags, ChargeOption0MsbFlags,
     ChargeOption1Flags, ChargeOption1MsbFlags, ChargeOption2Flags, ChargeOption2MsbFlags,
-    ChargeOption3Flags, ChargeOption3MsbFlags, ChargerStatusFaultFlags, ChargerStatusFlags,
-    ProchotOption0Flags, ProchotOption0MsbFlags, ProchotOption1Flags, ProchotOption1MsbFlags,
-    ProchotStatusFlags, ProchotStatusMsbFlags,
+    ChargeOption3Flags, ChargeOption3MsbFlags, ChargeOption4Flags, ChargeOption4MsbFlags,
+    ChargerStatusFaultFlags, ChargerStatusFlags, ProchotOption0Flags, ProchotOption0MsbFlags,
+    ProchotOption1Flags, ProchotOption1MsbFlags, ProchotStatusFlags, ProchotStatusMsbFlags,
+    VminActiveProtectionFlags, VminActiveProtectionMsbFlags,
 };
 #[cfg(feature = "binrw")]
 use binrw::{BinRead, BinWrite};
@@ -220,14 +221,93 @@ impl defmt::Format for ChargerStatusFaultFlags {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ProchotStatusMsbFlags {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{=u8:b}", self.bits());
+        if self.bits() == 0 {
+            defmt::write!(fmt, "(empty)");
+            return;
+        }
+        let mut first = true;
+        if self.contains(ProchotStatusMsbFlags::EN_PROCHOT_EXT) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "EN_PROCHOT_EXT");
+            first = false;
+        }
+
+        // Extract and display PROCHOT_WIDTH value (bits 5:4 of MSB)
+        let width_val = (self.bits() & ProchotStatusMsbFlags::PROCHOT_WIDTH.bits()) >> 4;
+        // PROCHOT_WIDTH is a field, not a simple flag. We'll show its value.
+        // The ProchotStatus struct itself also decodes this, but showing it here makes the MSB flags more complete.
+        if self.intersects(ProchotStatusMsbFlags::PROCHOT_WIDTH) { // If any of the width bits are set
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "PROCHOT_WIDTH_VAL={}", width_val);
+            first = false;
+        }
+
+        if self.contains(ProchotStatusMsbFlags::PROCHOT_CLEAR) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "PROCHOT_CLEAR");
+            first = false;
+        }
+        if self.contains(ProchotStatusMsbFlags::STAT_VAP_FAIL) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_VAP_FAIL");
+            first = false;
+        }
+        if self.contains(ProchotStatusMsbFlags::STAT_EXIT_VAP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_EXIT_VAP");
+            // first = false; // last one
+        }
     }
 }
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for ProchotStatusFlags {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{=u8:b}", self.bits());
+        if self.is_empty() {
+            defmt::write!(fmt, "(empty)");
+            return;
+        }
+        let mut first = true;
+        if self.contains(ProchotStatusFlags::STAT_VINDPM) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_VINDPM");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_COMP) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_COMP");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_ICRIT) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_ICRIT");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_INOM) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_INOM");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_IDCHG1) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_IDCHG1");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_VSYS) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_VSYS");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_BAT_REMOVAL) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_BAT_REMOVAL");
+            first = false;
+        }
+        if self.contains(ProchotStatusFlags::STAT_ADPT_REMOVAL) {
+            if !first { defmt::write!(fmt, " | "); }
+            defmt::write!(fmt, "STAT_ADPT_REMOVAL");
+            // first = false; // last one
+        }
     }
 }
 
@@ -292,19 +372,20 @@ impl defmt::Format for ProchotStatus {
     }
 }
 
-/// Represents the Charge Current setting in mA.
+/// Represents the Charge Current setting.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(little))]
-#[cfg_attr(feature = "binrw", bw(little))]
-pub struct ChargeCurrent {
+#[cfg_attr(feature = "binrw", br(little))] // Assuming LSB first for raw u16
+#[cfg_attr(feature = "binrw", bw(little))] // Assuming LSB first for raw u16
+pub struct ChargeCurrentSetting {
     pub milliamps: u16,
     pub rsns_bat: SenseResistorValue,
 }
 
-impl Default for ChargeCurrent {
+impl Default for ChargeCurrentSetting {
     fn default() -> Self {
+        // Datasheet reset for REG0x03/02h is 0000h, which corresponds to 0mA.
         Self {
             milliamps: 0,
             rsns_bat: SenseResistorValue::default(),
@@ -312,157 +393,251 @@ impl Default for ChargeCurrent {
     }
 }
 
-impl ChargeCurrent {
-    /// Creates a new ChargeCurrent from a raw 7-bit register value and RSNS setting.
-    /// The 7-bit value represents the charge current setting.
-    pub fn from_raw(raw_7bit: u8, rsns_bat: SenseResistorValue) -> Self {
-        let lsb_ma = match rsns_bat {
-            SenseResistorValue::R5mOhm => 128, // 128mA/LSB for 5mΩ
-            SenseResistorValue::R10mOhm => 64, // 64mA/LSB for 10mΩ
+impl ChargeCurrentSetting {
+    pub fn from_milliamps(milliamps: u16, rsns_bat: SenseResistorValue) -> Self {
+        Self { milliamps, rsns_bat }
+    }
+
+    pub fn to_milliamps(&self) -> u16 {
+        self.milliamps
+    }
+
+    /// Creates a new ChargeCurrentSetting from a raw 16-bit register value (LSB first).
+    /// LSB (02h): bits 7:6 are D1:D0. MSB (03h): bits 4:0 are D6:D2.
+    pub fn from_raw(raw_value: u16, rsns_bat: SenseResistorValue) -> Self {
+        let lsb_byte = (raw_value & 0xFF) as u8;
+        let msb_byte = ((raw_value >> 8) & 0xFF) as u8;
+        let d1_d0 = (lsb_byte >> 6) & 0x03; // Extract D1:D0 from LSB bits 7:6
+        let d6_d2 = msb_byte & 0x1F;      // Extract D6:D2 from MSB bits 4:0
+        let raw_7bit = (d6_d2 << 2) | d1_d0;
+
+        let lsb_ma_val = match rsns_bat {
+            SenseResistorValue::R5mOhm => 128,
+            SenseResistorValue::R10mOhm => 64,
         };
-        // Raw value is 7-bit (0-127)
         Self {
-            milliamps: (raw_7bit as u16) * lsb_ma,
+            milliamps: (raw_7bit as u16) * lsb_ma_val,
             rsns_bat,
         }
     }
 
-    /// Converts the ChargeCurrent to a raw 7-bit register value.
-    pub fn to_raw(&self) -> u8 {
-        let lsb_ma = match self.rsns_bat {
+    /// Converts the ChargeCurrentSetting to a raw 16-bit register value (LSB first).
+    /// LSB (02h): bits 7:6 are D1:D0. MSB (03h): bits 4:0 are D6:D2.
+    pub fn to_raw(&self) -> u16 {
+        let lsb_ma_val = match self.rsns_bat {
             SenseResistorValue::R5mOhm => 128,
             SenseResistorValue::R10mOhm => 64,
         };
-        // Ensure the result fits in 7 bits (0-127)
-        let raw_value = self.milliamps / lsb_ma;
-        if raw_value > 0x7F {
-            0x7F // Clamp to max 7-bit value
-        } else {
-            raw_value as u8
+        let mut raw_7bit_val = self.milliamps / lsb_ma_val;
+        if raw_7bit_val > 0x7F {
+            raw_7bit_val = 0x7F; // Clamp to max 7-bit value
+        }
+        let raw_7bit = raw_7bit_val as u8;
+
+        let d1_d0 = raw_7bit & 0x03;
+        let d6_d2 = (raw_7bit >> 2) & 0x1F;
+
+        // LSB (02h): bits 7:6 are D1:D0. Other bits are reserved (assume 0).
+        let lsb_byte = d1_d0 << 6;
+        // MSB (03h): bits 4:0 are D6:D2. Other bits are reserved (assume 0).
+        let msb_byte = d6_d2;
+
+        (msb_byte as u16) << 8 | (lsb_byte as u16)
+    }
+
+    /// Converts to MSB and LSB bytes for register writing.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let raw_val = self.to_raw();
+        ((raw_val & 0xFF) as u8, ((raw_val >> 8) & 0xFF) as u8)
+    }
+}
+
+/// Represents the Charge Voltage setting.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = |x: u16| ChargeVoltageSetting::from_raw(x, None) ))]
+#[cfg_attr(feature = "binrw", bw(map = |s: &ChargeVoltageSetting| s.to_raw() ))]
+pub struct ChargeVoltageSetting {
+    pub millivolts: u16,
+}
+
+impl Default for ChargeVoltageSetting {
+    fn default() -> Self {
+        // Default for 4S battery: 16.8V (raw 0x41A0)
+        // This will be overridden by Config::new based on cell_count
+        Self::from_millivolts(16800)
+    }
+}
+
+impl ChargeVoltageSetting {
+    pub fn from_millivolts(millivolts: u16) -> Self {
+        Self { millivolts }
+    }
+
+    pub fn to_millivolts(&self) -> u16 {
+        self.millivolts
+    }
+
+    /// Creates a new ChargeVoltageSetting from a 16-bit raw register value (LSB first).
+    /// LSB (04h): D4-D0 in bits 7:3. MSB (05h): D11-D5 in bits 6:0.
+    /// Raw value has LSB 8mV.
+    pub fn from_raw(raw_value: u16, _rsns: Option<SenseResistorValue>) -> Self {
+        let lsb_byte = (raw_value & 0xFF) as u8;
+        let msb_byte = ((raw_value >> 8) & 0xFF) as u8;
+
+        let d4_d0 = (lsb_byte >> 3) & 0x1F; // Extract D4-D0 from LSB bits 7:3
+        let d11_d5 = msb_byte & 0x7F;      // Extract D11-D5 from MSB bits 6:0
+
+        let combined_12bit = ((d11_d5 as u16) << 5) | (d4_d0 as u16);
+        Self { millivolts: combined_12bit * 8 }
+    }
+
+    /// Converts the ChargeVoltageSetting to a raw 16-bit register value (LSB first).
+    /// LSB (04h): D4-D0 in bits 7:3. MSB (05h): D11-D5 in bits 6:0.
+    pub fn to_raw(&self) -> u16 {
+        let mut combined_12bit = self.millivolts / 8;
+        if combined_12bit > 0xFFF { // Clamp to max 12-bit value
+            combined_12bit = 0xFFF;
+        }
+
+
+        let d4_d0 = (combined_12bit & 0x1F) as u8;      // Lower 5 bits
+        let d11_d5 = ((combined_12bit >> 5) & 0x7F) as u8; // Upper 7 bits
+
+        // LSB (04h): D4-D0 in bits 7:3. Other bits are reserved (assume 0).
+        let lsb_byte = d4_d0 << 3;
+        // MSB (05h): D11-D5 in bits 6:0. Other bits are reserved (assume 0).
+        let msb_byte = d11_d5;
+
+        (msb_byte as u16) << 8 | (lsb_byte as u16)
+    }
+
+    /// Converts to MSB and LSB bytes for register writing.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let raw_val = self.to_raw();
+        ((raw_val & 0xFF) as u8, ((raw_val >> 8) & 0xFF) as u8)
+    }
+}
+
+/// Represents the OTG Voltage setting.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = |x: u16| OtgVoltageSetting::from_raw(x) ))]
+#[cfg_attr(feature = "binrw", bw(map = |s: &OtgVoltageSetting| s.to_raw() ))]
+pub struct OtgVoltageSetting {
+    pub millivolts: u16,
+}
+
+impl Default for OtgVoltageSetting {
+    fn default() -> Self {
+        // Datasheet reset for REG0x07/06h is 0x09C4.
+        // This corresponds to 2496mV.
+        Self::from_raw(0x09C4)
+    }
+}
+
+impl OtgVoltageSetting {
+    /// LSB value for OTG Voltage in mV.
+    pub const LSB_MV: u16 = 8;
+
+    pub fn from_millivolts(millivolts: u16) -> Self {
+        Self { millivolts }
+    }
+
+    pub fn to_millivolts(&self) -> u16 {
+        self.millivolts
+    }
+
+    /// Creates a new OtgVoltageSetting from a 16-bit raw register value.
+    /// According to datasheet (e.g., SLUSE65, Table 8-44, 8-45):
+    /// MSB (REG0x07): D11-D6 in bits 5:0. Bit 7 is reserved, Bit 6 is unused by D11-D6.
+    /// LSB (REG0x06): D5 in bit 7, D4-D0 in bits 6:2. Bits 1:0 are reserved.
+    pub fn from_raw(raw_value: u16) -> Self {
+        let msb_u8 = (raw_value >> 8) as u8;
+        let lsb_u8 = (raw_value & 0xFF) as u8;
+
+        // Extract D11-D6 from MSB bits 5:0 (msb_u8[5] is D11, msb_u8[0] is D6)
+        let d11_d6 = (msb_u8 & 0x3F) as u16;
+        // Extract D5 from LSB bit 7
+        let d5 = ((lsb_u8 >> 7) & 0x01) as u16;
+        // Extract D4-D0 from LSB bits 6:2 (lsb_u8[6] is D4, lsb_u8[2] is D0)
+        let d4_d0 = ((lsb_u8 >> 2) & 0x1F) as u16;
+
+        // Combine D11..D6, D5, D4..D0 to form the 12-bit value
+        let combined_12bit = (d11_d6 << 6) | (d5 << 5) | d4_d0;
+        Self {
+            millivolts: combined_12bit * Self::LSB_MV,
         }
     }
 
-    /// Converts the ChargeCurrent to milliamps.
-    pub fn to_milliamps(&self) -> u16 {
-        self.milliamps
-    }
-}
+    /// Converts the OtgVoltageSetting to a raw 16-bit register value.
+    /// According to datasheet (e.g., SLUSE65, Table 8-44, 8-45):
+    /// MSB (REG0x07): D11-D6 in bits 5:0. Bit 7 is reserved, Bit 6 is unused by D11-D6.
+    /// LSB (REG0x06): D5 in bit 7, D4-D0 in bits 6:2. Bits 1:0 are reserved.
+    pub fn to_raw(&self) -> u16 {
+        let mut raw_12bit = self.millivolts / Self::LSB_MV;
+        if raw_12bit > 0xFFF { // Clamp to max 12-bit value (4095)
+            raw_12bit = 0xFFF;
+        }
 
-/// Represents the Charge Voltage setting in mV.
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = ChargeVoltage::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct ChargeVoltage(pub u16);
+        // D11-D6 are bits 11:6 of raw_12bit
+        let val_d11_d6 = ((raw_12bit >> 6) & 0x3F) as u8;
+        // D5 is bit 5 of raw_12bit
+        let val_d5 = ((raw_12bit >> 5) & 0x01) as u8;
+        // D4-D0 are bits 4:0 of raw_12bit
+        let val_d4_d0 = (raw_12bit & 0x1F) as u8;
 
-impl ChargeVoltage {
-    /// Creates a new ChargeVoltage from a 16-bit raw register value.
-    /// The 12-bit value (D11-D0) is formed by:
-    /// MSB (0x05): D11-D5 in bits 6:0
-    /// LSB (0x04): D4-D0 in bits 7:3
-    pub fn from_u16(value: u16) -> Self {
-        ChargeVoltage(value & 0x7FF8)
-    }
+        // MSB (REG0x07): D11-D6 in bits 5:0. Bit 7 reserved (0), Bit 6 unused (0).
+        // So, msb_u8 becomes 00<D11..D6>
+        let msb_u8 = val_d11_d6;
 
-    /// Converts the ChargeVoltage to a 16-bit raw register value.
-    /// The 12-bit value (D11-D0) is formed by:
-    /// MSB (0x05): D11-D5 in bits 6:0
-    /// LSB (0x04): D4-D0 in bits 4:0
-    pub fn to_u16(&self) -> u16 {
-        // raw_value is a 12-bit value (D11-D0)
-        // msb (0x05) bits 6:0 should be D11-D5
-        // lsb (0x04) bits 7:3 should be D4-D0
-        self.0 & 0x7FF8
+        // LSB (REG0x06): D5 in bit 7, D4-D0 in bits 6:2. Bits 1:0 reserved (0).
+        // So, lsb_u8 becomes <D5><D4..D0>00
+        let lsb_u8 = (val_d5 << 7) | (val_d4_d0 << 2);
+
+        (msb_u8 as u16) << 8 | (lsb_u8 as u16)
     }
 
-    /// Converts the ChargeVoltage to raw MSB and LSB register values.
+    /// Converts to MSB and LSB bytes for register writing.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = self.0;
-        let msb = ((raw_value & 0x7F) >> 8) as u8; // D11-D5
-        let lsb = (raw_value & 0x07) as u8; // D4-D0, shifted to bits 7:3 for 04h register
-        (lsb, msb) // Returns (04h_value, 05h_value)
-    }
-
-    /// Converts the ChargeVoltage to millivolts.
-    pub fn to_millivolts(&self) -> u16 {
-        self.0
+        let raw_val = self.to_raw();
+        // LSB is first byte, MSB is second byte in the pair for register map
+        ((raw_val & 0xFF) as u8, ((raw_val >> 8) & 0xFF) as u8)
     }
 }
 
-/// Represents the OTG Voltage setting in mV.
+/// Represents the OTG Current setting.
+/// REG0x09/08h: MSB (09h) D6-D0, LSB (08h) is reserved (0x00).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = OtgVoltage::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct OtgVoltage(pub u16);
-
-impl OtgVoltage {
-    /// LSB value for OTG Voltage in mV.
-    pub const LSB_MV: u16 = 8; // 8mV/LSB based on datasheet 7.5
-
-    /// Creates a new OtgVoltage from a 16-bit raw register value.
-    /// The 12-bit value (D11-D0) is formed by:
-    /// MSB (0x07): D11-D5 in bits 6:0
-    /// LSB (0x06): D4-D0 in bits 7:3
-    pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        let lsb = value as u8;
-        // D11-D5 are in msb bits 6:0
-        // D4-D0 are in lsb bits 7:3
-        let d11_d5 = (msb & 0x7F) as u16; // Extract bits 6:0 from msb
-        let d4_d0 = ((lsb >> 3) & 0x1F) as u16; // Extract bits 7:3 from lsb
-
-        // Combine them to form a 12-bit raw_value (D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 D0)
-        let raw_value = (d11_d5 << 5) | d4_d0;
-        OtgVoltage(raw_value * Self::LSB_MV)
-    }
-
-    /// Converts the OtgVoltage to a 16-bit raw register value.
-    /// The 12-bit value (D11-D0) is formed by:
-    /// MSB (0x07): D11-D5 in bits 6:0
-    /// LSB (0x06): D4-D0 in bits 7:3
-    pub fn to_u16(&self) -> u16 {
-        let raw_value = self.0 / Self::LSB_MV;
-        // raw_value is a 12-bit value (D11-D0)
-        // msb (0x07) bits 6:0 should be D11-D5
-        // lsb (0x06) bits 7:3 should be D4-D0
-        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
-        let lsb = ((raw_value & 0x1F) << 3) as u8; // D4-D0 shifted to bits 7:3
-        (lsb as u16) | ((msb as u16) << 8)
-    }
-
-    /// Converts the OtgVoltage to raw MSB and LSB register values.
-    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let raw_value = self.0 / Self::LSB_MV;
-        let msb = ((raw_value >> 5) & 0x7F) as u8; // D11-D5
-        let lsb = ((raw_value & 0x1F) << 3) as u8; // D4-D0 shifted to bits 7:3
-        (lsb, msb)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(Format))]
-#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(little))]
-#[cfg_attr(feature = "binrw", bw(little))]
-pub struct OtgCurrent {
+#[cfg_attr(feature = "binrw", br(map = |x: u16| OtgCurrentSetting::from_raw((x >> 8) as u8, SenseResistorValue::default()) ))] // Reads MSB for raw value
+#[cfg_attr(feature = "binrw", bw(map = |s: &OtgCurrentSetting| (s.to_raw() as u16) << 8 ))] // Writes raw value to MSB
+pub struct OtgCurrentSetting {
     pub milliamps: u16,
     pub rsns_bat: SenseResistorValue,
 }
 
-impl Default for OtgCurrent {
+impl Default for OtgCurrentSetting {
     fn default() -> Self {
-        Self {
-            milliamps: 0,
-            rsns_bat: SenseResistorValue::default(),
-        }
+        // Datasheet reset for REG0x09/08h is 0x3C00.
+        // MSB (0x09h) is 0x3C (raw 7-bit value). LSB (0x08h) is 0x00.
+        Self::from_raw(0x3C, SenseResistorValue::default())
     }
 }
 
-impl OtgCurrent {
-    /// Creates a new OtgCurrent from a raw 7-bit register value and RSNS setting.
+impl OtgCurrentSetting {
+    pub fn from_milliamps(milliamps: u16, rsns_bat: SenseResistorValue) -> Self {
+        Self { milliamps, rsns_bat }
+    }
+
+    pub fn to_milliamps(&self) -> u16 {
+        self.milliamps
+    }
+
+    /// Creates a new OtgCurrentSetting from a raw 7-bit register value (from MSB REG0x09h) and RSNS setting.
     pub fn from_raw(raw_7bit: u8, rsns_bat: SenseResistorValue) -> Self {
         let lsb_ma = match rsns_bat {
             SenseResistorValue::R5mOhm => 100, // 100mA/LSB for 5mΩ
@@ -475,7 +650,7 @@ impl OtgCurrent {
         }
     }
 
-    /// Converts the OtgCurrent to a raw 7-bit register value.
+    /// Converts the OtgCurrentSetting to a raw 7-bit register value (for MSB REG0x09h).
     pub fn to_raw(&self) -> u8 {
         let lsb_ma = match self.rsns_bat {
             SenseResistorValue::R5mOhm => 100,
@@ -489,123 +664,226 @@ impl OtgCurrent {
             raw_value as u8
         }
     }
+
+    /// Converts to MSB and LSB bytes for register writing.
+    /// LSB (REG0x08h) is reserved and should be 0x00.
+    /// MSB (REG0x09h) contains the 7-bit raw current value.
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        (0x00, self.to_raw())
+    }
 }
 
-/// Represents the Input Voltage setting in mV.
+/// Represents the Input Voltage (VINDPM) setting.
+/// REG0x0B/0Ah: LSB (0Ah) D7-D0, MSB (0Bh) D8 in bit 5.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = InputVoltage::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct InputVoltage(pub u16);
+#[cfg_attr(feature = "binrw", br(map = |x: u16| InputVoltageSetting::from_raw(x) ))]
+#[cfg_attr(feature = "binrw", bw(map = |s: &InputVoltageSetting| s.to_raw() ))]
+pub struct InputVoltageSetting {
+    pub millivolts: u16,
+}
 
-impl InputVoltage {
+impl Default for InputVoltageSetting {
+    fn default() -> Self {
+        // Datasheet reset for REG0x0B/0Ah is 0x00C8.
+        // LSB (0Ah) = 0xC8, MSB (0Bh) = 0x00.
+        // This corresponds to (200 * 64) + 3200 = 12800 + 3200 = 16000 mV = 16V.
+        Self::from_raw(0x00C8)
+    }
+}
+
+impl InputVoltageSetting {
     /// LSB value for Input Voltage in mV.
     pub const LSB_MV: u16 = 64;
     /// Offset value for Input Voltage in mV.
-    pub const OFFSET_MV: u16 = 3200; // 3200mV offset (from 3.2V)
+    pub const OFFSET_MV: u16 = 3200; // 3200mV offset
 
-    /// Creates a new InputVoltage from a 16-bit raw register value.
+    pub fn from_millivolts(millivolts: u16) -> Self {
+        Self { millivolts }
+    }
+
+    pub fn to_millivolts(&self) -> u16 {
+        self.millivolts
+    }
+
+    /// Creates a new InputVoltageSetting from a 16-bit raw register value (LSB first).
     /// The 9-bit value (D8-D0) is formed by:
     /// MSB (0x0B): D8 in bit 5
     /// LSB (0x0A): D7-D0 in bits 7:0
-    pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        let lsb = value as u8;
+    pub fn from_raw(raw_value: u16) -> Self {
+        let lsb_byte = (raw_value & 0xFF) as u8;
+        let msb_byte = ((raw_value >> 8) & 0xFF) as u8;
+
         // D8 is in bit 5 of MSB (0x0B)
-        let raw_value = ((((msb >> 5) & 0x01) as u16) << 8) | (lsb as u16); // D8-D0 (D8 is bit 5 of MSB)
-        InputVoltage(raw_value * Self::LSB_MV + Self::OFFSET_MV)
+        let d8 = (msb_byte >> 5) & 0x01;
+        // D7-D0 are in LSB (0x0A)
+        let d7_d0 = lsb_byte;
+
+        let combined_9bit = ((d8 as u16) << 8) | (d7_d0 as u16);
+        Self {
+            millivolts: combined_9bit * Self::LSB_MV + Self::OFFSET_MV,
+        }
     }
 
-    /// Converts the InputVoltage to a 16-bit raw register value.
+    /// Converts the InputVoltageSetting to a raw 16-bit register value (LSB first).
     /// The 9-bit value (D8-D0) is formed by:
     /// MSB (0x0B): D8 in bit 5
     /// LSB (0x0A): D7-D0 in bits 7:0
-    pub fn to_u16(&self) -> u16 {
-        // Ensure the value is not less than the offset to prevent underflow
-        let raw_value_9bit = if self.0 >= Self::OFFSET_MV {
-            (self.0 - Self::OFFSET_MV) / Self::LSB_MV
+    pub fn to_raw(&self) -> u16 {
+        let mut raw_9bit = if self.millivolts >= Self::OFFSET_MV {
+            (self.millivolts - Self::OFFSET_MV) / Self::LSB_MV
         } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MV)
+            0 // Clamp to the minimum register value
         };
-        // raw_value_9bit is a 9-bit value (D8-D0)
-        let d8 = (raw_value_9bit >> 8) & 0x01; // D8 is bit 8
-        let d7_d0 = raw_value_9bit & 0xFF; // D7-D0 are bits 7:0
 
-        // MSB (0x0B): D8 in bit 5
-        let msb = (d8 as u8) << 5;
+        if raw_9bit > 0x1FF { // Clamp to max 9-bit value
+            raw_9bit = 0x1FF;
+        }
 
-        // LSB (0x0A): D7-D0 in bits 7:0
-        let lsb = d7_d0 as u8;
+        let d8 = ((raw_9bit >> 8) & 0x01) as u8; // D8 is bit 8 of the 9-bit value
+        let d7_d0 = (raw_9bit & 0xFF) as u8;   // D7-D0 are bits 7:0
 
-        (lsb as u16) | ((msb as u16) << 8)
+        // MSB (0x0B): D8 in bit 5. Other bits are reserved (assume 0).
+        let msb_byte = d8 << 5;
+        // LSB (0x0A): D7-D0 in bits 7:0.
+        let lsb_byte = d7_d0;
+
+        (msb_byte as u16) << 8 | (lsb_byte as u16)
     }
 
-    /// Converts the InputVoltage to raw MSB and LSB register values.
-    /// Since InputVoltage is an 8-bit register, LSB will be 0.
+    /// Converts to MSB and LSB bytes for register writing.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        let _raw_value = (self.0 - Self::OFFSET_MV) / Self::LSB_MV;
-        // Ensure the value is not less than the offset to prevent underflow
-        let raw_value = if self.0 >= Self::OFFSET_MV {
-            (self.0 - Self::OFFSET_MV) / Self::LSB_MV
-        } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MV)
-        };
-        let msb = (((raw_value >> 8) & 0x01) << 5) as u8; // D8 in bit 5 of MSB (0x0B)
-        let lsb = (raw_value & 0xFF) as u8; // D7-D0 in bits 7:0 of LSB (0x0A)
-        (lsb, msb) // LSB, MSB
-    }
-
-    /// Converts the InputVoltage to a raw 8-bit register value.
-    /// This function is likely not used for InputVoltage as it's a 2-byte register.
-    /// However, if it were to return the LSB part, it would be:
-    pub fn to_register_value(&self) -> u8 {
-        let _raw_value = (self.0 - Self::OFFSET_MV) / Self::LSB_MV;
-        // Ensure the value is not less than the offset to prevent underflow
-        let raw_value = if self.0 >= Self::OFFSET_MV {
-            (self.0 - Self::OFFSET_MV) / Self::LSB_MV
-        } else {
-            0 // Clamp to the minimum register value (corresponding to OFFSET_MV)
-        };
-        (raw_value & 0xFF) as u8 // Return LSB part
+        let raw_val = self.to_raw();
+        // LSB is first byte, MSB is second byte in the pair for register map
+        ((raw_val & 0xFF) as u8, ((raw_val >> 8) & 0xFF) as u8)
     }
 }
 
-/// Represents the Minimum System Voltage setting in mV.
+/// Represents the Minimum System Voltage (VSYS_MIN) setting.
+/// REG0x0D/0Ch: MSB (0Dh) D7-D0, LSB (0Ch) is reserved (0x00).
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
 #[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
-#[cfg_attr(feature = "binrw", br(map = VsysMin::from_u16))]
-#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
-pub struct VsysMin(pub u16);
+#[cfg_attr(feature = "binrw", br(map = |x: u16| VsysMinSetting::from_raw(x) ))]
+#[cfg_attr(feature = "binrw", bw(map = |s: &VsysMinSetting| s.to_raw() ))]
+pub struct VsysMinSetting {
+    pub millivolts: u16,
+}
 
-impl VsysMin {
+impl Default for VsysMinSetting {
+    fn default() -> Self {
+        // Datasheet default for 4S (from Config::new logic): 12.3V
+        // 12300mV / 100mV/LSB = 123 (0x7B)
+        // Raw value: MSB=0x7B, LSB=0x00 => 0x7B00
+        Self::from_raw(0x7B00)
+    }
+}
+
+impl VsysMinSetting {
     /// LSB value for Minimum System Voltage in mV.
     pub const LSB_MV: u16 = 100;
 
-    /// Creates a new VsysMin from a 16-bit raw register value.
-    pub fn from_u16(value: u16) -> Self {
-        let msb = (value >> 8) as u8;
-        VsysMin((msb as u16) * Self::LSB_MV)
+    pub fn from_millivolts(millivolts: u16) -> Self {
+        Self { millivolts }
     }
 
-    /// Converts the VsysMin to a 16-bit raw register value.
-    pub fn to_u16(&self) -> u16 {
-        let msb = (self.0 / Self::LSB_MV) as u8;
-        (msb as u16) << 8
+    pub fn to_millivolts(&self) -> u16 {
+        self.millivolts
     }
 
-    /// Converts the VsysMin to a raw 8-bit register value.
-    pub fn to_register_value(&self) -> u8 {
-        (self.0 / Self::LSB_MV) as u8
+    /// Creates a new VsysMinSetting from a 16-bit raw register value (LSB first).
+    /// MSB (0x0D) contains the 8-bit value. LSB (0x0C) is reserved (0x00).
+    pub fn from_raw(raw_value: u16) -> Self {
+        let msb_byte = ((raw_value >> 8) & 0xFF) as u8; // Extract MSB
+        Self {
+            millivolts: (msb_byte as u16) * Self::LSB_MV,
+        }
     }
 
-    /// Converts the VsysMin to raw MSB and LSB register values.
-    /// Since VsysMin is an 8-bit register, LSB will be 0.
+    /// Converts the VsysMinSetting to a raw 16-bit register value (LSB first).
+    /// MSB (0x0D) contains the 8-bit value. LSB (0x0C) is 0x00.
+    pub fn to_raw(&self) -> u16 {
+        let mut msb_val = self.millivolts / Self::LSB_MV;
+        if msb_val > 0xFF { // Clamp to max 8-bit value
+            msb_val = 0xFF;
+        }
+        (msb_val as u16) << 8 // LSB is 0x00
+    }
+
+    /// Converts to MSB and LSB bytes for register writing.
+    /// LSB (REG0x0Ch) is 0x00. MSB (REG0x0Dh) contains the 8-bit value.
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
-        (0x00, self.to_register_value())
+        let raw_val = self.to_raw();
+        // LSB is first byte, MSB is second byte
+        ((raw_val & 0xFF) as u8, ((raw_val >> 8) & 0xFF) as u8)
     }
 }
+
+/// Represents the Input Current Limit Set by Host (IIN_HOST) setting.
+/// REG0x0F/0Eh: MSB (0Fh) D6-D0, LSB (0Eh) is reserved (0x00).
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = |x: u16| IinHostSetting::from_milliamps(x) ))]
+#[cfg_attr(feature = "binrw", bw(map = |s: &IinHostSetting| s.to_milliamps() ))]
+pub struct IinHostSetting {
+    pub milliamps: u16,
+}
+
+impl Default for IinHostSetting {
+    fn default() -> Self {
+        Self { milliamps: 0 } // Default to 0mA, specific value set in Config::new
+    }
+}
+
+impl IinHostSetting {
+    pub fn from_milliamps(milliamps: u16) -> Self {
+        Self { milliamps }
+    }
+
+    pub fn to_milliamps(&self) -> u16 {
+        self.milliamps
+    }
+
+    /// Creates a new IinHostSetting from a raw 16-bit register value and RSNS_AC setting.
+    /// `raw_reg_value` is the 16-bit content (e.g., 0x1F00). MSB (0x0F) has current, LSB (0x0E) is 0x00.
+    pub fn from_raw(raw_reg_value: u16, rsns_ac: SenseResistorValue) -> Self {
+        let raw_7bit = (raw_reg_value >> 8) as u8; // Extract 7-bit current code from MSB
+        let (lsb_ma, offset_ma) = match rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100), // LSB 100mA, Offset 100mA
+            SenseResistorValue::R10mOhm => (50, 50),   // LSB 50mA, Offset 50mA
+        };
+        let milliamps = (raw_7bit as u16) * lsb_ma + offset_ma;
+        Self { milliamps }
+    }
+
+    /// Converts the IinHostSetting to a raw 16-bit register value using RSNS_AC.
+    /// Returns a 16-bit value where MSB is the 7-bit current code and LSB is 0x00.
+    pub fn to_raw(&self, rsns_ac: SenseResistorValue) -> u16 {
+        let (lsb_ma, offset_ma) = match rsns_ac {
+            SenseResistorValue::R5mOhm => (100, 100),
+            SenseResistorValue::R10mOhm => (50, 50),
+        };
+        let mut raw_7bit_val = 0;
+        if self.milliamps >= offset_ma {
+            raw_7bit_val = (self.milliamps - offset_ma) / lsb_ma;
+        }
+        if raw_7bit_val > 0x7F { // Clamp to max 7-bit value (127)
+            raw_7bit_val = 0x7F;
+        }
+        (raw_7bit_val as u16) << 8 // Place 7-bit code in MSB, LSB is 0x00
+    }
+
+    /// Converts to MSB and LSB bytes for register writing, using RSNS_AC.
+    /// LSB (REG0x0Eh) is 0x00. MSB (REG0x0Fh) contains the 7-bit current code.
+    pub fn to_msb_lsb_bytes(&self, rsns_ac: SenseResistorValue) -> (u8, u8) {
+        let raw_val = self.to_raw(rsns_ac);
+        // LSB is first byte, MSB is second byte
+        ((raw_val & 0xFF) as u8, (raw_val >> 8) as u8)
+    }
+}
+
 
 /// Represents the Input Current Limit Set by Host in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -1433,6 +1711,15 @@ impl defmt::Format for ChargeOption3 {
     }
 }
 
+impl Default for ChargeOption3 {
+    fn default() -> Self {
+        Self {
+            msb_flags: ChargeOption3MsbFlags::from_bits_truncate(0x04), // Reset MSB 0x04
+            lsb_flags: ChargeOption3Flags::from_bits_truncate(0x34),   // Reset LSB 0x34
+        }
+    }
+}
+
 impl ChargeOption3 {
     pub fn from_u16(value: u16) -> Self {
         Self {
@@ -1451,6 +1738,166 @@ impl ChargeOption3 {
     pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
         let raw_value = self.to_u16();
         (raw_value as u8, (raw_value >> 8) as u8)
+    }
+}
+
+/// Represents the ChargeOption4 register.
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = ChargeOption4::from_u16))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
+pub struct ChargeOption4 {
+    pub msb_flags: ChargeOption4MsbFlags,
+    pub lsb_flags: ChargeOption4Flags,
+}
+
+impl Default for ChargeOption4 {
+    fn default() -> Self {
+        Self {
+            msb_flags: ChargeOption4MsbFlags::from_bits_truncate(0x00), // Reset MSB 0x00
+            lsb_flags: ChargeOption4Flags::from_bits_truncate(0x48),   // Reset LSB 0x48
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for ChargeOption4 {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "ChargeOption4 {{ msb_flags: {=u8:b}, lsb_flags: {=u8:b} }}",
+            self.msb_flags.bits(),
+            self.lsb_flags.bits()
+        );
+    }
+}
+
+impl ChargeOption4 {
+    pub fn from_u16(value: u16) -> Self {
+        Self {
+            msb_flags: ChargeOption4MsbFlags::from_bits_truncate(((value >> 8) & 0xFF) as u8),
+            lsb_flags: ChargeOption4Flags::from_bits_truncate((value & 0xFF) as u8),
+        }
+    }
+
+    pub fn to_u16(&self) -> u16 {
+        let mut value = 0;
+        value |= (self.msb_flags.bits() as u16) << 8;
+        value |= self.lsb_flags.bits() as u16;
+        value
+    }
+
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let raw_value = self.to_u16();
+        (raw_value as u8, (raw_value >> 8) as u8)
+    }
+}
+
+/// Represents the VminActiveProtection register (REG0x3F/3Eh).
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(map = VminActiveProtection::from_u16))]
+#[cfg_attr(feature = "binrw", bw(map = |&s: &Self| s.to_u16()))]
+pub struct VminActiveProtection {
+    pub msb_flags: VminActiveProtectionMsbFlags,
+    pub lsb_flags: VminActiveProtectionFlags,
+}
+
+impl Default for VminActiveProtection {
+    fn default() -> Self {
+        // Default for 2s-5s cell count: 0x006C
+        // MSB (0x3F) = 0x00
+        // LSB (0x3E) = 0x6C
+        // (VSYS_TH2 = 0b011011 (27 -> 5.9V for 2s-5s), EN_VSYSTH2_FOLLOW_VSYSTH1 = 0, EN_FRS = 0)
+        // For 1S, LSB is 0x04 (VSYS_TH2 = 0b000001 (1 -> 3.2V for 1S), EN_VSYSTH2_FOLLOW_VSYSTH1 = 0, EN_FRS = 0)
+        // We'll use the 2s-5s default here, user can adjust for 1S if needed via specific methods.
+        Self {
+            msb_flags: VminActiveProtectionMsbFlags::from_bits_truncate(0x00),
+            lsb_flags: VminActiveProtectionFlags::from_bits_truncate(0x6C),
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for VminActiveProtection {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "VminActiveProtection {{ msb_flags: {}, lsb_flags: {} }}",
+            self.msb_flags, // Uses the custom Format impl for VminActiveProtectionMsbFlags
+            self.lsb_flags  // Uses the custom Format impl for VminActiveProtectionFlags
+        );
+    }
+}
+
+impl VminActiveProtection {
+    pub fn from_u16(value: u16) -> Self {
+        Self {
+            msb_flags: VminActiveProtectionMsbFlags::from_bits_truncate(((value >> 8) & 0xFF) as u8),
+            lsb_flags: VminActiveProtectionFlags::from_bits_truncate((value & 0xFF) as u8),
+        }
+    }
+
+    pub fn to_u16(&self) -> u16 {
+        let mut value = 0;
+        value |= (self.msb_flags.bits() as u16) << 8;
+        value |= self.lsb_flags.bits() as u16;
+        value
+    }
+
+    pub fn to_msb_lsb_bytes(&self) -> (u8, u8) {
+        let raw_value = self.to_u16();
+        (raw_value as u8, (raw_value >> 8) as u8)
+    }
+
+    /// Converts the raw VBUS_VAP_TH value to voltage in mV.
+    /// Formula: 3200mV + raw_value * 100mV
+    pub fn vbus_vap_th_mv(&self) -> u16 {
+        3200 + (self.msb_flags.get_vbus_vap_th() as u16) * 100
+    }
+
+    /// Sets the VBUS_VAP_TH value from voltage in mV.
+    /// Clamps the value to the valid range (3200mV to 15900mV).
+    pub fn set_vbus_vap_th_mv(&mut self, voltage_mv: u16) {
+        let clamped_voltage = voltage_mv.clamp(3200, 15900);
+        let raw_value = ((clamped_voltage - 3200) / 100) as u8;
+        self.msb_flags.set_vbus_vap_th(raw_value);
+    }
+
+    /// Converts the raw VSYS_TH2 value to voltage in mV (assuming 2s-5s mode).
+    /// Formula: 3200mV + raw_value * 100mV
+    /// Note: This conversion might differ for 1S mode. Refer to datasheet for details.
+    pub fn vsys_th2_mv(&self) -> u16 {
+        3200 + (self.lsb_flags.get_vsys_th2() as u16) * 100
+    }
+
+    /// Sets the VSYS_TH2 value from voltage in mV (assuming 2s-5s mode).
+    /// Clamps the value to the valid range (3200mV to 9500mV for 2s-5s).
+    /// Note: This conversion might differ for 1S mode. Refer to datasheet for details.
+    pub fn set_vsys_th2_mv(&mut self, voltage_mv: u16) {
+        let clamped_voltage = voltage_mv.clamp(3200, 9500); // Assuming 2s-5s range
+        let raw_value = ((clamped_voltage - 3200) / 100) as u8;
+        self.lsb_flags.set_vsys_th2(raw_value);
+    }
+
+    /// Gets the state of the EN_VSYSTH2_FOLLOW_VSYSTH1 bit.
+    pub fn en_vsysth2_follow_vsysth1(&self) -> bool {
+        self.lsb_flags.get_en_vsysth2_follow_vsysth1()
+    }
+
+    /// Sets the state of the EN_VSYSTH2_FOLLOW_VSYSTH1 bit.
+    pub fn set_en_vsysth2_follow_vsysth1(&mut self, enable: bool) {
+        self.lsb_flags.set_en_vsysth2_follow_vsysth1(enable);
+    }
+
+    /// Gets the state of the EN_FRS bit.
+    pub fn en_frs(&self) -> bool {
+        self.lsb_flags.get_en_frs()
+    }
+
+    /// Sets the state of the EN_FRS bit.
+    pub fn set_en_frs(&mut self, enable: bool) {
+        self.lsb_flags.set_en_frs(enable);
     }
 }
 
@@ -1548,21 +1995,16 @@ pub struct Config {
     pub rsns_ac: SenseResistorValue,
     pub charge_option0: ChargeOption0,
     pub charge_option1: ChargeOption1,
-    /// Raw register value for ChargeCurrent (REG0x03/02h).
-    /// LSB (02h): bits 7:6 are D1:D0. MSB (03h): bits 4:0 are D6:D2.
-    pub charge_current: u16,
-    /// Raw register value for ChargeVoltage (REG0x05/04h).
-    /// LSB (04h): bits 7:3 are D4:D0. MSB (05h): bits 6:0 are D11:D5.
-    pub charge_voltage: u16,
-    /// Raw register value for InputVoltage (VINDPM) (REG0x0B/0Ah).
-    /// LSB (0Ah): bits 7:0 are D7:D0. MSB (0Bh): bit 5 is D8.
-    pub input_voltage: u16,
-    /// Raw register value for VSYS_MIN (REG0x0D/0Ch).
-    /// MSB (0Dh): bits 7:0 are D7:D0. LSB (0Ch) is reserved (should be 0x00).
-    pub vsys_min: u16,
-    /// Raw register value for IIN_HOST (REG0x0F/0Eh).
-    /// MSB (0Fh): bits 6:0 are D6:D0. LSB (0Eh) is reserved (should be 0x00).
-    pub iin_host: u16,
+    pub charge_option3: ChargeOption3,
+    pub charge_option4: ChargeOption4,
+    pub charge_current: ChargeCurrentSetting,
+    pub charge_voltage: ChargeVoltageSetting,
+    pub otg_voltage: OtgVoltageSetting,
+    pub otg_current: OtgCurrentSetting,
+    pub input_voltage: InputVoltageSetting,
+    pub vsys_min: VsysMinSetting,
+    pub iin_host: IinHostSetting,
+    pub vmin_active_protection: VminActiveProtection,
     // TODO: Add other configurable registers as needed
 }
 
@@ -1596,33 +2038,42 @@ impl Config {
                 msb_flags: co1_msb,
                 lsb_flags: ChargeOption1Flags::from_bits_truncate(0x00), // Datasheet reset for LSB of ChargeOption1 (0x30h) is 0x00
             },
-            charge_current: 0x0000, // Default 0A.
-            charge_voltage: match cell_count {
-                1 => 0x1068, // 4.2V.
-                2 => 0x20D0, // 8.4V.
-                3 => 0x3138, // 12.6V.
-                4 => 0x41A0, // 16.8V.
-                5 => 0x5208, // 21.0V.
-                _ => 0x41A0, // Default to 4S
-            },
-            input_voltage: 0x00C8, // Default VINDPM 16V (raw 0x00C8 based on (16000-3200)/64 = 200 = 0xC8 for LSB, MSB D8=0)
-            // The register value is LSB=0xC8, MSB=0x00 (bit 5 for D8) -> 0x00C8
-            vsys_min: match cell_count {
-                // VSYS_MIN is 8 bits in MSB (0x0D), LSB (0x0C) is 0x00.
+            charge_option3: ChargeOption3::default(), // Uses datasheet reset 0434h
+            charge_option4: ChargeOption4::default(), // Uses datasheet reset 0048h
+            charge_current: ChargeCurrentSetting::from_raw(0x0000, rsns_bat), // Default 0A.
+            charge_voltage: ChargeVoltageSetting::from_raw(
+                match cell_count {
+                    1 => 0x1068, // 4.2V.
+                    2 => 0x20D0, // 8.4V.
+                    3 => 0x3138, // 12.6V.
+                    4 => 0x41A0, // 16.8V.
+                    5 => 0x5208, // 21.0V.
+                    _ => 0x41A0, // Default to 4S
+                },
+                None, // rsns not needed for voltage
+            ),
+            otg_voltage: OtgVoltageSetting::from_raw(0x09C4), // Datasheet reset for REG0x07/06h is 0x09C4 (2496mV)
+            otg_current: OtgCurrentSetting::from_raw(0x3C, rsns_bat), // Datasheet reset for REG0x09/08h is 0x3C00 (MSB 0x3C)
+            input_voltage: InputVoltageSetting::from_raw(0x00C8), // Default VINDPM 16V (raw 0x00C8)
+            vsys_min: VsysMinSetting::from_raw(match cell_count {
                 1 => 0x2400, // 3.6V. Raw MSB 0x24.
                 2 => 0x4200, // 6.6V. Raw MSB 0x42.
                 3 => 0x5C00, // 9.2V. Raw MSB 0x5C.
                 4 => 0x7B00, // 12.3V. Raw MSB 0x7B.
                 5 => 0x9A00, // 15.4V. Raw MSB 0x9A.
                 _ => 0x7B00, // Default to 4S
-            },
-            iin_host: match rsns_ac {
-                // IIN_HOST is 7 bits in MSB (0x0F), LSB (0x0E) is 0x00.
-                // For 5mOhm, 3.2A. (3200-100)/100 = 31 = 0x1F. So MSB=0x1F. Value = 0x1F00
-                // For 10mOhm, 3.25A. (3250-50)/50 = 64 = 0x40. So MSB=0x40. Value = 0x4000
-                SenseResistorValue::R5mOhm => 0x1F00,
-                SenseResistorValue::R10mOhm => 0x4000,
-            },
+            }),
+            iin_host: IinHostSetting::from_raw(
+                match rsns_ac {
+                    // IIN_HOST is 7 bits in MSB (0x0F), LSB (0x0E) is 0x00.
+                    // For 5mOhm, 3.2A. Raw MSB=0x1F. Value = 0x1F00
+                    // For 10mOhm, 3.25A. Raw MSB=0x40. Value = 0x4000
+                    SenseResistorValue::R5mOhm => 0x1F00,
+                    SenseResistorValue::R10mOhm => 0x4000,
+                },
+                rsns_ac,
+            ),
+            vmin_active_protection: VminActiveProtection::default(), // Uses datasheet reset (e.g. 0x006C for 2s-5s)
         }
     }
 }
@@ -1630,9 +2081,9 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config::new(
-            4,
-            SenseResistorValue::default(),
-            SenseResistorValue::default(),
+            4, // Default to 4-cell
+            SenseResistorValue::default(), // Default RsnsBat
+            SenseResistorValue::default(), // Default RsnsAc
         )
     }
 }
