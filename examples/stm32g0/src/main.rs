@@ -15,11 +15,8 @@ use {defmt_rtt as _, panic_probe as _};
 
 use bq25730_async_rs::{
     Bq25730,
-    data_types::{AdcMeasurements, ChargeCurrent, ChargeVoltage},
-};
-use uom::si::{
-    Quantity, SI,
-    electrical_resistance::{Dimension, ElectricalResistance, milliohm},
+    data_types::{AdcMeasurements, ChargeCurrent, ChargeVoltage, SenseResistorValue},
+    registers::{ChargeOption0MsbFlags, ChargeOption1MsbFlags, WatchdogTimerAdjust},
 };
 
 bind_interrupts!(struct Irqs {
@@ -46,7 +43,26 @@ async fn main(_spawner: Spawner) {
         config,
     );
 
-    let mut bq = Bq25730::new(i2c, 0x6B, 4); // BQ25730 I2C 地址是 0x6B，电池节数 4
+    
+    let mut config = bq25730_async_rs::data_types::Config::new(
+        4,
+        SenseResistorValue::R5mOhm,
+        SenseResistorValue::R10mOhm,
+    );
+    config
+        .charge_option0
+        .msb_flags
+        .remove(ChargeOption0MsbFlags::EN_LWPWR);
+    config
+        .charge_option0
+        .msb_flags
+        .set_watchdog_timer(WatchdogTimerAdjust::Disabled);
+    config
+        .charge_option1
+        .msb_flags
+        .insert(ChargeOption1MsbFlags::EN_IBAT);
+
+    let mut bq = Bq25730::new(i2c, 0x6B, config); // BQ25730 I2C 地址是 0x6B，电池节数 4
 
     // 1. 初始化 BQ25730
     info!("Initializing BQ25730...");
@@ -55,34 +71,6 @@ async fn main(_spawner: Spawner) {
         // core::panic!("Failed to initialize BQ25730: {:?}", e); // 在示例中不直接panic
     }
     info!("BQ25730 initialization complete.");
-
-    // 设置检流电阻：VBUS侧 10mΩ (RSNS_RAC = 0b), VBAT侧 5mΩ (RSNS_RSR = 1b)
-    // ChargeOption1 MSB (0x31) 默认值 0x3F (0b00111111)
-    // RSNS_RAC (bit 3) = 0, RSNS_RSR (bit 2) = 1
-    // 0b00111111 & ~(1 << 3) | (1 << 2) = 0b00110111 (0x37)
-    let charge_option1 = bq25730_async_rs::data_types::ChargeOption1 {
-        msb_flags: bq25730_async_rs::registers::ChargeOption1MsbFlags::from_bits_truncate(0x37),
-        lsb_flags: bq25730_async_rs::registers::ChargeOption1Flags::empty(),
-    };
-    if let Err(e) = bq.set_charge_option1(charge_option1).await {
-        error!("Failed to set charge option 1: {:?}", e);
-    } else {
-        info!("Charge option 1 set for sense resistors.");
-    }
-
-    // 禁用低功耗模式 (EN_LWPWR = 0b)，启用性能模式以使 ADC 可用
-    // ChargeOption0 MSB (0x01) 默认值 0xE7 (0b11100111)
-    // EN_LWPWR (bit 7) = 0
-    // WDTMR_ADJ (bit 6:5) = 00b (禁用看门狗定时器)
-    let charge_option0 = bq25730_async_rs::data_types::ChargeOption0 {
-        msb_flags: bq25730_async_rs::registers::ChargeOption0MsbFlags::from_bits_truncate(0x27), // 0b00100111 (EN_LWPWR=0, WDTMR_ADJ=00, 其他保持默认)
-        lsb_flags: bq25730_async_rs::registers::ChargeOption0Flags::from_bits_truncate(0x0E), // 0b00001110 (保持 IBAT_GAIN, EN_LDO, EN_IIN_DPM 默认启用)
-    };
-    if let Err(e) = bq.set_charge_option0(charge_option0).await {
-        error!("Failed to set charge option 0: {:?}", e);
-    } else {
-        info!("Charge option 0 set for performance mode and watchdog disabled.");
-    }
 
     // 验证 ChargeOption0 寄存器设置
     match bq.read_charge_option0().await {
@@ -104,11 +92,14 @@ async fn main(_spawner: Spawner) {
     // 2. 充电控制示例
     info!("--- Charging Control Example ---");
     // 设置充电电流为 512 mA (4 * 128mA LSB)
-    let charge_current = ChargeCurrent(512); // Directly set the raw value in mA
+    let charge_current = ChargeCurrent {
+        milliamps: 512,
+        rsns_bat: bq25730_async_rs::data_types::SenseResistorValue::R5mOhm,
+    }; // Directly set the raw value in mA
     if let Err(e) = bq.set_charge_current(charge_current).await {
         error!("Failed to set charge current: {:?}", e);
     } else {
-        info!("Charge current set to {} mA.", charge_current.0);
+        info!("Charge current set to {} mA.", charge_current.milliamps);
     }
 
     // 设置充电电压为 18000 mV (5 节磷酸铁锂电池，每节 3.6V)
@@ -144,11 +135,6 @@ async fn main(_spawner: Spawner) {
 
     // 4. 读取电池电压和电流示例 (循环读取)
     info!("--- Reading Battery Data Example (Loop) ---");
-    // 检流电阻配置：VBUS侧 10mΩ，VBAT侧 5mΩ
-    let _sense_resistor_vbus: Quantity<Dimension, SI<f32>, f32> =
-        ElectricalResistance::new::<milliohm>(10.0);
-    let _sense_resistor_vbat: Quantity<Dimension, SI<f32>, f32> =
-        ElectricalResistance::new::<milliohm>(5.0);
 
     loop {
         info!("--- Reading BQ25730 Data ---");
@@ -156,43 +142,7 @@ async fn main(_spawner: Spawner) {
         // 读取 ChargerStatus 寄存器
         match bq.read_charger_status().await {
             Ok(status) => {
-                info!("Charger Status:");
-                info!(
-                    "  STAT_AC: {}",
-                    status
-                        .status_flags
-                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::STAT_AC)
-                );
-                info!(
-                    "  IN_OTG: {}",
-                    status
-                        .status_flags
-                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_OTG)
-                );
-                info!(
-                    "  IN_VAP: {}",
-                    status
-                        .status_flags
-                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_VAP)
-                );
-                info!(
-                    "  IN_FCHRG: {}",
-                    status
-                        .status_flags
-                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_FCHRG)
-                );
-                info!(
-                    "  IN_PCHRG: {}",
-                    status
-                        .status_flags
-                        .contains(bq25730_async_rs::registers::ChargerStatusFlags::IN_PCHRG)
-                );
-                info!(
-                    "  Fault VSYS_UVP: {}",
-                    status.fault_flags.contains(
-                        bq25730_async_rs::registers::ChargerStatusFaultFlags::FAULT_VSYS_UVP
-                    )
-                );
+                info!("Charger Status: {:?}", status);
             }
             Err(e) => {
                 error!("Failed to read Charger Status: {:?}", e);
@@ -221,8 +171,8 @@ async fn main(_spawner: Spawner) {
                 info!("ADC Measurements:");
                 info!("  VSYS: {} mV", adc_measurements.vsys.0);
                 info!("  VBUS: {} mV", adc_measurements.vbus.0);
-                info!("  ICHG: {} mA", adc_measurements.ichg.0);
-                info!("  IDCHG: {} mA", adc_measurements.idchg.0);
+                info!("  ICHG: {} mA", adc_measurements.ichg.milliamps);
+                info!("  IDCHG: {} mA", adc_measurements.idchg.milliamps);
                 info!("  CMPIN: {} mV", adc_measurements.cmpin.0);
                 info!("  IIN: {} mA", adc_measurements.iin.milliamps);
                 info!("  VBAT: {} mV", adc_measurements.vbat.0);
@@ -232,30 +182,6 @@ async fn main(_spawner: Spawner) {
                 error!("Failed to read ADC measurements: {:?}", e);
             }
         }
-
-        // 读取充电电流 (如果需要单独读取)
-        /*
-        match bq.read_charge_current().await {
-            Ok(current) => {
-                info!("Charge Current Register: {} mA", current.0);
-            }
-            Err(e) => {
-                error!("Failed to read charge current register: {:?}", e);
-            }
-        }
-        */
-
-        // 读取充电电压 (如果需要单独读取)
-        /*
-        match bq.read_charge_voltage().await {
-            Ok(voltage) => {
-                info!("Charge Voltage Register: {} mV", voltage.0);
-            }
-            Err(e) => {
-                error!("Failed to read charge voltage register: {:?}", e);
-            }
-        }
-        */
 
         info!("----------------------------");
         Timer::after(Duration::from_secs(1)).await;

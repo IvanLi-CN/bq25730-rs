@@ -101,24 +101,80 @@ pub enum Register {
 
 use bitflags::bitflags;
 
+/// Watchdog Timer Adjust settings (ChargeOption0 MSB bits 6:5)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum WatchdogTimerAdjust {
+    /// Disable Watchdog Timer
+    Disabled = 0b00,
+    /// Enabled, 5 sec timeout
+    Sec5 = 0b01,
+    /// Enabled, 88 sec timeout
+    Sec88 = 0b10,
+    /// Enabled, 175 sec timeout (Default)
+    Sec175 = 0b11,
+}
+
+impl WatchdogTimerAdjust {
+    /// Returns the bit pattern for the register, shifted to the correct position.
+    pub const fn bits(self) -> u8 {
+        (self as u8) << 5
+    }
+
+    /// Creates a WatchdogTimerAdjust from the raw register bits (shifted).
+    pub const fn from_bits(bits: u8) -> Option<Self> {
+        match (bits >> 5) & 0b11 {
+            0b00 => Some(Self::Disabled),
+            0b01 => Some(Self::Sec5),
+            0b10 => Some(Self::Sec88),
+            0b11 => Some(Self::Sec175),
+            _ => None, // Should not happen with mask
+        }
+    }
+}
+
 bitflags! {
     /// ChargeOption0 (01h) MSB bit masks
+    /// Note: WDTMR_ADJ (bits 6:5) are handled separately using the WatchdogTimerAdjust enum.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ChargeOption0MsbFlags: u8 {
         const EN_LWPWR = 1 << 7;
-        const WDTMR_ADJ = 0b11 << 5;
+        // WDTMR_ADJ bits (6:5) are handled by the WatchdogTimerAdjust enum
         const IIN_DPM_AUTO_DISABLE = 1 << 4;
         const OTG_ON_CHRGOK = 1 << 3;
         const EN_OOA = 1 << 2;
         const PWM_FREQ = 1 << 1;
         const LOW_PTM_RIPPLE = 1 << 0;
+
+        /// Mask for the WDTMR_ADJ bits.
+        const WDTMR_ADJ_MASK = 0b11 << 5;
+    }
+}
+
+impl ChargeOption0MsbFlags {
+    /// Sets the watchdog timer adjustment value.
+    pub fn set_watchdog_timer(&mut self, setting: WatchdogTimerAdjust) {
+        // Remove the current watchdog timer bits
+        self.remove(Self::WDTMR_ADJ_MASK);
+        // Create flags representing only the new setting
+        let new_setting_flags = Self::from_bits_retain(setting.bits());
+        // Insert the new setting bits
+        self.insert(new_setting_flags);
+    }
+
+    /// Gets the watchdog timer adjustment setting.
+    pub fn get_watchdog_timer(&self) -> Option<WatchdogTimerAdjust> {
+        WatchdogTimerAdjust::from_bits(self.bits())
     }
 }
 
 #[cfg(feature = "defmt")]
 impl defmt::Format for ChargeOption0MsbFlags {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "{=u8:b}", self.bits());
+        // Format flags and watchdog setting separately for clarity
+        let flags_part = self.bits() & !ChargeOption0MsbFlags::WDTMR_ADJ_MASK.bits();
+        let wdt_part = self.get_watchdog_timer();
+        defmt::write!(fmt, "Flags({=u8:b}) WDT({:?})", flags_part, wdt_part);
     }
 }
 

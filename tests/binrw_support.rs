@@ -1,6 +1,6 @@
 #![cfg(feature = "binrw")]
 
-use binrw::{io::Cursor, BinRead, BinWrite, Endian};
+use binrw::{BinRead, BinWrite, Endian, io::Cursor};
 use bq25730_async_rs::data_types::*;
 use bq25730_async_rs::registers::*;
 
@@ -59,7 +59,10 @@ fn test_prochot_status_binrw_roundtrip() {
 
 #[test]
 fn test_charge_current_binrw_roundtrip() {
-    let original = ChargeCurrent { milliamps: 1024, rsns_bat: SenseResistorValue::R5mOhm };
+    let original = ChargeCurrent {
+        milliamps: 1024,
+        rsns_bat: SenseResistorValue::R5mOhm,
+    };
     test_binrw_roundtrip(original);
 }
 
@@ -77,7 +80,10 @@ fn test_otg_voltage_binrw_roundtrip() {
 
 #[test]
 fn test_otg_current_binrw_roundtrip() {
-    let original = OtgCurrent { milliamps: 2000, rsns_bat: SenseResistorValue::R5mOhm };
+    let original = OtgCurrent {
+        milliamps: 2000,
+        rsns_bat: SenseResistorValue::R5mOhm,
+    };
     test_binrw_roundtrip(original);
 }
 
@@ -95,13 +101,19 @@ fn test_vsys_min_binrw_roundtrip() {
 
 #[test]
 fn test_iin_host_binrw_roundtrip() {
-    let original = IinHost { milliamps: 3000, rsns_ac: SenseResistorValue::R5mOhm };
+    let original = IinHost {
+        milliamps: 3000,
+        rsns_ac: SenseResistorValue::R5mOhm,
+    };
     test_binrw_roundtrip(original);
 }
 
 #[test]
 fn test_iin_dpm_binrw_roundtrip() {
-    let original = IinDpm { milliamps: 2500, rsns_ac: SenseResistorValue::R5mOhm };
+    let original = IinDpm {
+        milliamps: 2500,
+        rsns_ac: SenseResistorValue::R5mOhm,
+    };
     test_binrw_roundtrip(original);
 }
 
@@ -110,9 +122,18 @@ fn test_adc_measurements_binrw_roundtrip() {
     let original = AdcMeasurements {
         vbat: AdcVbat(3776),
         vsys: AdcVsys(3968),
-        ichg: AdcIchg { milliamps: 500, rsns_bat: SenseResistorValue::R5mOhm },
-        idchg: AdcIdchg { milliamps: 1000, rsns_bat: SenseResistorValue::R5mOhm },
-        iin: AdcIin { milliamps: 800, rsns_ac: SenseResistorValue::R5mOhm }, // 8 * 100mA/LSB for 5mOhm
+        ichg: AdcIchg {
+            milliamps: 500,
+            rsns_bat: SenseResistorValue::R5mOhm,
+        },
+        idchg: AdcIdchg {
+            milliamps: 1000,
+            rsns_bat: SenseResistorValue::R5mOhm,
+        },
+        iin: AdcIin {
+            milliamps: 800,
+            rsns_ac: SenseResistorValue::R5mOhm,
+        }, // 8 * 100mA/LSB for 5mOhm
         psys: AdcPsys(600),
         vbus: AdcVbus(4992),
         cmpin: AdcCmpin(96),
@@ -128,19 +149,28 @@ fn test_adccmpin_binrw_roundtrip() {
 
 #[test]
 fn test_adcichg_binrw_roundtrip() {
-    let original = AdcIchg { milliamps: 500, rsns_bat: SenseResistorValue::R5mOhm };
+    let original = AdcIchg {
+        milliamps: 500,
+        rsns_bat: SenseResistorValue::R5mOhm,
+    };
     test_binrw_roundtrip(original);
 }
 
 #[test]
 fn test_adcidchg_binrw_roundtrip() {
-    let original = AdcIdchg { milliamps: 1000, rsns_bat: SenseResistorValue::R5mOhm };
+    let original = AdcIdchg {
+        milliamps: 1000,
+        rsns_bat: SenseResistorValue::R5mOhm,
+    };
     test_binrw_roundtrip(original);
 }
 
 #[test]
 fn test_adciin_binrw_roundtrip() {
-    let original = AdcIin { milliamps: 800, rsns_ac: SenseResistorValue::R5mOhm }; // 8 * 100mA/LSB for 5mOhm
+    let original = AdcIin {
+        milliamps: 800,
+        rsns_ac: SenseResistorValue::R5mOhm,
+    }; // 8 * 100mA/LSB for 5mOhm
     test_binrw_roundtrip(original);
 }
 

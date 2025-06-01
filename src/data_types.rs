@@ -16,6 +16,10 @@ use binrw::{BinRead, BinWrite};
 /// Enum to represent the sense resistor value.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(repr = u8))] // Assuming u8 representation for the enum
+#[cfg_attr(feature = "binrw", bw(repr = u8))] // Assuming u8 representation for the enum
+#[repr(u8)]
 pub enum SenseResistorValue {
     R5mOhm,  // 5mΩ sense resistor
     R10mOhm, // 10mΩ sense resistor
@@ -88,42 +92,58 @@ impl defmt::Format for ChargerStatusFlags {
         }
         let mut first = true;
         if self.contains(ChargerStatusFlags::STAT_AC) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_AC");
             first = false;
         }
         if self.contains(ChargerStatusFlags::ICO_DONE) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "ICO_DONE");
             first = false;
         }
         if self.contains(ChargerStatusFlags::IN_VAP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "IN_VAP");
             first = false;
         }
         if self.contains(ChargerStatusFlags::IN_VINDPM) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "IN_VINDPM");
             first = false;
         }
         if self.contains(ChargerStatusFlags::IN_IIN_DPM) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "IN_IIN_DPM");
             first = false;
         }
         if self.contains(ChargerStatusFlags::IN_FCHRG) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "IN_FCHRG");
             first = false;
         }
         if self.contains(ChargerStatusFlags::IN_PCHRG) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "IN_PCHRG");
             first = false;
         }
         if self.contains(ChargerStatusFlags::IN_OTG) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "IN_OTG");
             // first = false; // Not needed for the last one
         }
@@ -139,42 +159,58 @@ impl defmt::Format for ChargerStatusFaultFlags {
         }
         let mut first = true;
         if self.contains(ChargerStatusFaultFlags::FAULT_ACOV) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_ACOV");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_BATOC) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_BATOC");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_ACOC) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_ACOC");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_SYSOVP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_SYSOVP");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_VSYS_UVP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_VSYS_UVP");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_FORCE_CONVERTER_OFF) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_FORCE_CONVERTER_OFF");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_OTG_OVP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_OTG_OVP");
             first = false;
         }
         if self.contains(ChargerStatusFaultFlags::FAULT_OTG_UVP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "FAULT_OTG_UVP");
             // first = false; // Not needed for the last one
         }
@@ -259,6 +295,9 @@ impl defmt::Format for ProchotStatus {
 /// Represents the Charge Current setting in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 pub struct ChargeCurrent {
     pub milliamps: u16,
     pub rsns_bat: SenseResistorValue,
@@ -318,7 +357,6 @@ impl ChargeCurrent {
 pub struct ChargeVoltage(pub u16);
 
 impl ChargeVoltage {
-
     /// Creates a new ChargeVoltage from a 16-bit raw register value.
     /// The 12-bit value (D11-D0) is formed by:
     /// MSB (0x05): D11-D5 in bits 6:0
@@ -406,6 +444,9 @@ impl OtgVoltage {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 pub struct OtgCurrent {
     pub milliamps: u16,
     pub rsns_bat: SenseResistorValue,
@@ -425,7 +466,7 @@ impl OtgCurrent {
     pub fn from_raw(raw_7bit: u8, rsns_bat: SenseResistorValue) -> Self {
         let lsb_ma = match rsns_bat {
             SenseResistorValue::R5mOhm => 100, // 100mA/LSB for 5mΩ
-            SenseResistorValue::R10mOhm => 50,  // 50mA/LSB for 10mΩ
+            SenseResistorValue::R10mOhm => 50, // 50mA/LSB for 10mΩ
         };
         // Raw value is 7-bit (0-127)
         Self {
@@ -569,6 +610,9 @@ impl VsysMin {
 /// Represents the Input Current Limit Set by Host in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 pub struct IinHost {
     pub milliamps: u16,
     pub rsns_ac: SenseResistorValue,
@@ -594,7 +638,7 @@ impl IinHost {
     pub fn from_raw(raw_7bit: u8, rsns_ac: SenseResistorValue) -> Self {
         let (lsb_ma, offset_ma) = match rsns_ac {
             SenseResistorValue::R5mOhm => (100, 100), // LSB 100mA, Offset 100mA for 5mΩ
-            SenseResistorValue::R10mOhm => (50, 50),   // LSB 50mA, Offset 50mA for 10mΩ
+            SenseResistorValue::R10mOhm => (50, 50),  // LSB 50mA, Offset 50mA for 10mΩ
         };
         // Raw value is 7-bit (0-127)
         Self {
@@ -626,6 +670,9 @@ impl IinHost {
 /// Represents the Input Current Limit in Use (IIN_DPM) in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 pub struct IinDpm {
     pub milliamps: u16,
     pub rsns_ac: SenseResistorValue,
@@ -650,7 +697,7 @@ impl IinDpm {
     pub fn from_raw(raw_7bit: u8, rsns_ac: SenseResistorValue) -> Self {
         let (lsb_ma, offset_ma) = match rsns_ac {
             SenseResistorValue::R5mOhm => (100, 100), // LSB 100mA, Offset 100mA for 5mΩ
-            SenseResistorValue::R10mOhm => (50, 50),   // LSB 50mA, Offset 50mA for 10mΩ
+            SenseResistorValue::R10mOhm => (50, 50),  // LSB 50mA, Offset 50mA for 10mΩ
         };
         // Raw value is 7-bit (0-127)
         Self {
@@ -713,8 +760,18 @@ impl Default for AdcMeasurements {
 #[cfg(feature = "defmt")]
 impl defmt::Format for AdcMeasurements {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "AdcMeasurements {{ vbat: {}, vsys: {}, ichg: {}, idchg: {}, iin: {}, psys: {}, vbus: {}, cmpin: {} }}",
-            self.vbat, self.vsys, self.ichg, self.idchg, self.iin, self.psys, self.vbus, self.cmpin);
+        defmt::write!(
+            fmt,
+            "AdcMeasurements {{ vbat: {}, vsys: {}, ichg: {}, idchg: {}, iin: {}, psys: {}, vbus: {}, cmpin: {} }}",
+            self.vbat,
+            self.vsys,
+            self.ichg,
+            self.idchg,
+            self.iin,
+            self.psys,
+            self.vbus,
+            self.cmpin
+        );
     }
 }
 
@@ -764,6 +821,9 @@ impl AdcCmpin {
 /// Represents the ADCICHG register value in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 pub struct AdcIchg {
     pub milliamps: u16,
     pub rsns_bat: SenseResistorValue,
@@ -783,7 +843,7 @@ impl AdcIchg {
     pub fn from_raw(raw_7bit_adc: u8, rsns_bat: SenseResistorValue) -> Self {
         let lsb_ma = match rsns_bat {
             SenseResistorValue::R5mOhm => 128, // 128mA/LSB for 5mΩ
-            SenseResistorValue::R10mOhm => 64,  // 64mA/LSB for 10mΩ
+            SenseResistorValue::R10mOhm => 64, // 64mA/LSB for 10mΩ
         };
         // ADCICHG is a 7-bit value (0-127)
         Self {
@@ -810,6 +870,9 @@ impl AdcIchg {
 
 /// Represents the ADCIDCHG register value in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 #[cfg_attr(feature = "defmt", derive(Format))]
 pub struct AdcIdchg {
     pub milliamps: u16,
@@ -829,7 +892,7 @@ impl AdcIdchg {
     /// Creates a new AdcIdchg from a raw 7-bit ADC value and RSNS setting.
     pub fn from_raw(raw_7bit_adc: u8, rsns_bat: SenseResistorValue) -> Self {
         let lsb_ma = match rsns_bat {
-            SenseResistorValue::R5mOhm => 512, // 512mA/LSB for 5mΩ
+            SenseResistorValue::R5mOhm => 512,  // 512mA/LSB for 5mΩ
             SenseResistorValue::R10mOhm => 256, // 256mA/LSB for 10mΩ
         };
         // ADCIDCHG is a 7-bit value (0-127)
@@ -858,6 +921,9 @@ impl AdcIdchg {
 /// Represents the ADCIIN register value in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(Format))]
+#[cfg_attr(feature = "binrw", derive(BinRead, BinWrite))]
+#[cfg_attr(feature = "binrw", br(little))]
+#[cfg_attr(feature = "binrw", bw(little))]
 pub struct AdcIin {
     pub milliamps: u16,
     pub rsns_ac: SenseResistorValue,
@@ -877,7 +943,7 @@ impl AdcIin {
     pub fn from_raw(raw_8bit_adc: u8, rsns_ac: SenseResistorValue) -> Self {
         let lsb_ma = match rsns_ac {
             SenseResistorValue::R5mOhm => 100, // 100mA/LSB for 5mΩ
-            SenseResistorValue::R10mOhm => 50,  // 50mA/LSB for 10mΩ
+            SenseResistorValue::R10mOhm => 50, // 50mA/LSB for 10mΩ
         };
         // ADCIIN is an 8-bit value (0-255)
         Self {
@@ -1214,7 +1280,6 @@ impl Default for ChargeOption0 {
     }
 }
 
-
 #[cfg(feature = "defmt")]
 impl defmt::Format for ChargeOption0 {
     fn format(&self, fmt: defmt::Formatter) {
@@ -1506,18 +1571,20 @@ impl Config {
     /// for a given cell count, battery sense resistor, and AC path sense resistor.
     pub fn new(cell_count: u8, rsns_bat: SenseResistorValue, rsns_ac: SenseResistorValue) -> Self {
         let mut co1_msb = ChargeOption1MsbFlags::from_bits_truncate(0x33); // Start with datasheet reset for MSB of ChargeOption1 (0x31h)
-                                                                          // Default for 0x31h is 0x33. Bit 2 (RSNS_RSR) = 1 (5mOhm), Bit 3 (RSNS_RAC) = 1 (5mOhm).
-                                                                          // If resistor is 10mOhm, clear the bit. If 5mOhm, set the bit.
+        // Default for 0x31h is 0x33. Bit 2 (RSNS_RSR) = 1 (5mOhm), Bit 3 (RSNS_RAC) = 1 (5mOhm).
+        // If resistor is 10mOhm, clear the bit. If 5mOhm, set the bit.
 
         if rsns_bat == SenseResistorValue::R5mOhm {
             co1_msb.insert(ChargeOption1MsbFlags::RSNS_RSR);
-        } else { // R10mOhm
+        } else {
+            // R10mOhm
             co1_msb.remove(ChargeOption1MsbFlags::RSNS_RSR);
         }
 
         if rsns_ac == SenseResistorValue::R5mOhm {
             co1_msb.insert(ChargeOption1MsbFlags::RSNS_RAC);
-        } else { // R10mOhm
+        } else {
+            // R10mOhm
             co1_msb.remove(ChargeOption1MsbFlags::RSNS_RAC);
         }
 
@@ -1539,7 +1606,7 @@ impl Config {
                 _ => 0x41A0, // Default to 4S
             },
             input_voltage: 0x00C8, // Default VINDPM 16V (raw 0x00C8 based on (16000-3200)/64 = 200 = 0xC8 for LSB, MSB D8=0)
-                                   // The register value is LSB=0xC8, MSB=0x00 (bit 5 for D8) -> 0x00C8
+            // The register value is LSB=0xC8, MSB=0x00 (bit 5 for D8) -> 0x00C8
             vsys_min: match cell_count {
                 // VSYS_MIN is 8 bits in MSB (0x0D), LSB (0x0C) is 0x00.
                 1 => 0x2400, // 3.6V. Raw MSB 0x24.
@@ -1562,6 +1629,10 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config::new(4, SenseResistorValue::default(), SenseResistorValue::default())
+        Config::new(
+            4,
+            SenseResistorValue::default(),
+            SenseResistorValue::default(),
+        )
     }
 }

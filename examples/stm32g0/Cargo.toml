@@ -41,11 +41,7 @@ cortex-m = { version = "0.7.7", features = [
 cortex-m-rt = "0.7.5"
 embedded-hal = "1.0.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-heapless = { version = "0.8", default-features = false }
 portable-atomic = { version = "1.11.0", features = ["critical-section"] }
-static_cell = "2.1.0"
-libm = "0.2.8"
-uom = { version = "0.37", default-features = false, features = ["si", "f32"] }
 
 bq25730-async-rs = { version = "*", path = "../../", features = ["async", "defmt"] }
 

@@ -13,17 +13,35 @@ pub mod data_types;
 pub mod errors;
 pub mod registers;
 use crate::data_types::{
-    AdcCmpin, AdcIchg, AdcIdchg, AdcIin, AdcMeasurements, AdcPsys, AdcVbat, AdcVbus, AdcVsys,
-    ChargeCurrent, ChargeOption0, ChargeOption1, ChargeOption2, ChargeOption3, ChargeVoltage,
-    ChargerStatus, IinDpm, IinHost, InputVoltage, OtgCurrent, OtgVoltage, ProchotStatus, VsysMin,
+    AdcCmpin,
+    AdcIchg,
+    AdcIdchg,
+    AdcIin,
+    AdcMeasurements,
+    AdcPsys,
+    AdcVbat,
+    AdcVbus,
+    AdcVsys,
+    ChargeCurrent,
+    ChargeOption0,
+    ChargeOption1,
+    ChargeOption2,
+    ChargeOption3,
+    ChargeVoltage,
+    ChargerStatus,
+    IinDpm,
+    IinHost,
+    InputVoltage,
+    OtgCurrent,
+    OtgVoltage,
+    ProchotStatus,
+    VsysMin,
     // Config, RsnsAc, RsnsBat are handled by the pub use below
 };
-use crate::registers::{
-    ChargeOption1Flags, ChargerStatusFaultFlags, ChargerStatusFlags,
-};
+use crate::registers::{ChargeOption1Flags, ChargerStatusFaultFlags, ChargerStatusFlags};
+pub use data_types::{Config, SenseResistorValue};
 pub use errors::Error;
-use registers::Register;
-pub use data_types::{SenseResistorValue, Config}; // Re-export Config and SenseResistorValue
+use registers::Register; // Re-export Config and SenseResistorValue
 
 // SenseResistorValue enum is now defined in data_types.rs
 
@@ -211,33 +229,41 @@ where
         let charge_current_bytes = self.config.charge_current.to_le_bytes(); // Assuming to_le_bytes() is appropriate, or use to_msb_lsb_bytes() if available and needed for consistency
         let charge_voltage_bytes = self.config.charge_voltage.to_le_bytes(); // Assuming to_le_bytes() is appropriate
 
-        self.write_registers(Register::ChargeOption0, &[
-            charge_option0_bytes.0, // ChargeOption0 LSB
-            charge_option0_bytes.1, // ChargeOption0 MSB
-            charge_current_bytes[0], // ChargeCurrent LSB
-            charge_current_bytes[1], // ChargeCurrent MSB
-            charge_voltage_bytes[0], // ChargeVoltage LSB
-            charge_voltage_bytes[1], // ChargeVoltage MSB
-        ]).await?;
+        self.write_registers(
+            Register::ChargeOption0,
+            &[
+                charge_option0_bytes.0,  // ChargeOption0 LSB
+                charge_option0_bytes.1,  // ChargeOption0 MSB
+                charge_current_bytes[0], // ChargeCurrent LSB
+                charge_current_bytes[1], // ChargeCurrent MSB
+                charge_voltage_bytes[0], // ChargeVoltage LSB
+                charge_voltage_bytes[1], // ChargeVoltage MSB
+            ],
+        )
+        .await?;
 
         // Write ChargeOption1 (Registers 0x30-0x31) - Not contiguous with the previous block
         let (lsb_co1, msb_co1) = self.config.charge_option1.to_msb_lsb_bytes();
-        self.write_registers(Register::ChargeOption1, &[lsb_co1, msb_co1]).await?;
-
+        self.write_registers(Register::ChargeOption1, &[lsb_co1, msb_co1])
+            .await?;
 
         // Group 2: InputVoltage, VsysMin, IinHost (Registers 0x0A-0x0F)
         // These are contiguous registers.
         let input_voltage_bytes = self.config.input_voltage.to_le_bytes();
         let vsys_min_bytes = self.config.vsys_min.to_le_bytes();
         let iin_host_bytes = self.config.iin_host.to_le_bytes();
-        self.write_registers(Register::InputVoltage, &[
-            input_voltage_bytes[0], // InputVoltage LSB
-            input_voltage_bytes[1], // InputVoltage MSB
-            vsys_min_bytes[0],      // VsysMin LSB
-            vsys_min_bytes[1],      // VsysMin MSB
-            iin_host_bytes[0],      // IinHost LSB
-            iin_host_bytes[1],      // IinHost MSB
-        ]).await?;
+        self.write_registers(
+            Register::InputVoltage,
+            &[
+                input_voltage_bytes[0], // InputVoltage LSB
+                input_voltage_bytes[1], // InputVoltage MSB
+                vsys_min_bytes[0],      // VsysMin LSB
+                vsys_min_bytes[1],      // VsysMin MSB
+                iin_host_bytes[0],      // IinHost LSB
+                iin_host_bytes[1],      // IinHost MSB
+            ],
+        )
+        .await?;
 
         // Clear SYSOVP and VSYS_UVP faults from ChargerStatus
         let mut charger_status = self.read_charger_status().await?;
@@ -308,12 +334,12 @@ where
                 offset_mv,
             ),
             // ADCVSYS is also at 0x2D (MSB) and 0x2C (LSB, though LSB is often 0 for 8-bit ADCs in 2-byte reads)
-            psys: AdcPsys::from_u8(adc_data_raw.as_ref()[0]),                     // ADCPSYS at 0x26
-            vbus: AdcVbus::from_u8(adc_data_raw.as_ref()[1]),                     // ADCVBUS at 0x27
+            psys: AdcPsys::from_u8(adc_data_raw.as_ref()[0]), // ADCPSYS at 0x26
+            vbus: AdcVbus::from_u8(adc_data_raw.as_ref()[1]), // ADCVBUS at 0x27
             idchg: AdcIdchg::from_raw(adc_data_raw.as_ref()[2], self.config.rsns_bat), // ADCIDCHG at 0x28
             ichg: AdcIchg::from_raw(adc_data_raw.as_ref()[3], self.config.rsns_bat), // ADCICHG at 0x29
-            cmpin: AdcCmpin::from_u8(adc_data_raw.as_ref()[4]),                   // ADCCMPIN at 0x2A
-            iin: AdcIin::from_raw(adc_data_raw.as_ref()[5], self.config.rsns_ac),   // ADCIIN at 0x2B
+            cmpin: AdcCmpin::from_u8(adc_data_raw.as_ref()[4]), // ADCCMPIN at 0x2A
+            iin: AdcIin::from_raw(adc_data_raw.as_ref()[5], self.config.rsns_ac), // ADCIIN at 0x2B
             vsys: AdcVsys::from_register_value(0, adc_data_raw.as_ref()[7], offset_mv), // Assuming MSB is at index 7 (0x2D)
         })
     }

@@ -2,21 +2,15 @@ pre-commit:
   parallel: true
   commands:
     fmt:
-      glob: "*.{rs}"
       run: cargo fmt
       stage_fixed: true
     clippy:
-      glob: "*.{rs}"
       run: cargo clippy
     test:
-      glob: "*.{rs}"
       run: cargo test
     test-binrw:
-      glob: "*.{rs}"
       run: cargo test --features binrw
     check-example-stm32g4:
-      glob: "*.{rs}"
       run: cd examples/stm32g4 && cargo check
     check-example-stm32g0:
-      glob: "*.{rs}"
       run: cd examples/stm32g0 && cargo check
