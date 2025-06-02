@@ -2,13 +2,11 @@
 
 use embedded_hal_mock::eh1::i2c::{Mock as I2cMock, Transaction as I2cTransaction};
 
-use bq25730_async_rs::BQ25730_I2C_ADDRESS;
-use bq25730_async_rs::errors::Error;
-use bq25730_async_rs::registers::Register;
 use bq25730_async_rs::{
-    RegisterAccess,
+    BQ25730_I2C_ADDRESS, Bq25730, Error, RegisterAccess,
     data_types::{Config, SenseResistorValue},
-}; // Updated imports
+    registers::Register,
+};
 use embedded_hal::i2c::ErrorKind;
 
 #[test]
