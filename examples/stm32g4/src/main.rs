@@ -15,7 +15,7 @@ use {defmt_rtt as _, panic_probe as _};
 
 use bq25730_async_rs::{
     Bq25730,
-    data_types::{AdcMeasurements, ChargeCurrent, ChargeVoltage, SenseResistorValue},
+    data_types::{AdcMeasurements, ChargeCurrentSetting, ChargeVoltageSetting, SenseResistorValue},
     registers::{ChargeOption0MsbFlags, ChargeOption1MsbFlags, WatchdogTimerAdjust},
 };
 
@@ -92,22 +92,19 @@ async fn main(_spawner: Spawner) {
     // 2. 充电控制示例
     info!("--- Charging Control Example ---");
     // 设置充电电流为 512 mA (4 * 128mA LSB)
-    let charge_current = ChargeCurrent {
-        milliamps: 512,
-        rsns_bat: bq25730_async_rs::data_types::SenseResistorValue::R5mOhm,
-    }; // Directly set the raw value in mA
-    if let Err(e) = bq.set_charge_current(charge_current).await {
+    let charge_current = ChargeCurrentSetting::from_milliamps(512, bq.config().rsns_bat);
+    if let Err(e) = bq.set_charge_current_setting(charge_current).await {
         error!("Failed to set charge current: {:?}", e);
     } else {
-        info!("Charge current set to {} mA.", charge_current.milliamps);
+        info!("Charge current set to {} mA.", charge_current.to_milliamps());
     }
 
     // 设置充电电压为 18000 mV (5 节磷酸铁锂电池，每节 3.6V)
-    let charge_voltage = ChargeVoltage(18000); // Directly set the raw value in mV
-    if let Err(e) = bq.set_charge_voltage(charge_voltage).await {
+    let charge_voltage = ChargeVoltageSetting::from_millivolts(18000);
+    if let Err(e) = bq.set_charge_voltage_setting(charge_voltage).await {
         error!("Failed to set charge voltage: {:?}", e);
     } else {
-        info!("Charge voltage set to {} mV.", charge_voltage.0);
+        info!("Charge voltage set to {} mV.", charge_voltage.to_millivolts());
     }
     info!("Charging control example complete.");
 

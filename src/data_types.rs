@@ -227,7 +227,9 @@ impl defmt::Format for ProchotStatusMsbFlags {
         }
         let mut first = true;
         if self.contains(ProchotStatusMsbFlags::EN_PROCHOT_EXT) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "EN_PROCHOT_EXT");
             first = false;
         }
@@ -236,24 +238,33 @@ impl defmt::Format for ProchotStatusMsbFlags {
         let width_val = (self.bits() & ProchotStatusMsbFlags::PROCHOT_WIDTH.bits()) >> 4;
         // PROCHOT_WIDTH is a field, not a simple flag. We'll show its value.
         // The ProchotStatus struct itself also decodes this, but showing it here makes the MSB flags more complete.
-        if self.intersects(ProchotStatusMsbFlags::PROCHOT_WIDTH) { // If any of the width bits are set
-            if !first { defmt::write!(fmt, " | "); }
+        if self.intersects(ProchotStatusMsbFlags::PROCHOT_WIDTH) {
+            // If any of the width bits are set
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "PROCHOT_WIDTH_VAL={}", width_val);
             first = false;
         }
 
         if self.contains(ProchotStatusMsbFlags::PROCHOT_CLEAR) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "PROCHOT_CLEAR");
             first = false;
         }
         if self.contains(ProchotStatusMsbFlags::STAT_VAP_FAIL) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_VAP_FAIL");
             first = false;
         }
         if self.contains(ProchotStatusMsbFlags::STAT_EXIT_VAP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_EXIT_VAP");
             // first = false; // last one
         }
@@ -269,42 +280,58 @@ impl defmt::Format for ProchotStatusFlags {
         }
         let mut first = true;
         if self.contains(ProchotStatusFlags::STAT_VINDPM) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_VINDPM");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_COMP) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_COMP");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_ICRIT) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_ICRIT");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_INOM) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_INOM");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_IDCHG1) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_IDCHG1");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_VSYS) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_VSYS");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_BAT_REMOVAL) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_BAT_REMOVAL");
             first = false;
         }
         if self.contains(ProchotStatusFlags::STAT_ADPT_REMOVAL) {
-            if !first { defmt::write!(fmt, " | "); }
+            if !first {
+                defmt::write!(fmt, " | ");
+            }
             defmt::write!(fmt, "STAT_ADPT_REMOVAL");
             // first = false; // last one
         }
@@ -395,7 +422,10 @@ impl Default for ChargeCurrentSetting {
 
 impl ChargeCurrentSetting {
     pub fn from_milliamps(milliamps: u16, rsns_bat: SenseResistorValue) -> Self {
-        Self { milliamps, rsns_bat }
+        Self {
+            milliamps,
+            rsns_bat,
+        }
     }
 
     pub fn to_milliamps(&self) -> u16 {
@@ -408,7 +438,7 @@ impl ChargeCurrentSetting {
         let lsb_byte = (raw_value & 0xFF) as u8;
         let msb_byte = ((raw_value >> 8) & 0xFF) as u8;
         let d1_d0 = (lsb_byte >> 6) & 0x03; // Extract D1:D0 from LSB bits 7:6
-        let d6_d2 = msb_byte & 0x1F;      // Extract D6:D2 from MSB bits 4:0
+        let d6_d2 = msb_byte & 0x1F; // Extract D6:D2 from MSB bits 4:0
         let raw_7bit = (d6_d2 << 2) | d1_d0;
 
         let lsb_ma_val = match rsns_bat {
@@ -487,22 +517,24 @@ impl ChargeVoltageSetting {
         let msb_byte = ((raw_value >> 8) & 0xFF) as u8;
 
         let d4_d0 = (lsb_byte >> 3) & 0x1F; // Extract D4-D0 from LSB bits 7:3
-        let d11_d5 = msb_byte & 0x7F;      // Extract D11-D5 from MSB bits 6:0
+        let d11_d5 = msb_byte & 0x7F; // Extract D11-D5 from MSB bits 6:0
 
         let combined_12bit = ((d11_d5 as u16) << 5) | (d4_d0 as u16);
-        Self { millivolts: combined_12bit * 8 }
+        Self {
+            millivolts: combined_12bit * 8,
+        }
     }
 
     /// Converts the ChargeVoltageSetting to a raw 16-bit register value (LSB first).
     /// LSB (04h): D4-D0 in bits 7:3. MSB (05h): D11-D5 in bits 6:0.
     pub fn to_raw(&self) -> u16 {
         let mut combined_12bit = self.millivolts / 8;
-        if combined_12bit > 0xFFF { // Clamp to max 12-bit value
+        if combined_12bit > 0xFFF {
+            // Clamp to max 12-bit value
             combined_12bit = 0xFFF;
         }
 
-
-        let d4_d0 = (combined_12bit & 0x1F) as u8;      // Lower 5 bits
+        let d4_d0 = (combined_12bit & 0x1F) as u8; // Lower 5 bits
         let d11_d5 = ((combined_12bit >> 5) & 0x7F) as u8; // Upper 7 bits
 
         // LSB (04h): D4-D0 in bits 7:3. Other bits are reserved (assume 0).
@@ -578,7 +610,8 @@ impl OtgVoltageSetting {
     /// LSB (REG0x06): D5 in bit 7, D4-D0 in bits 6:2. Bits 1:0 are reserved.
     pub fn to_raw(&self) -> u16 {
         let mut raw_12bit = self.millivolts / Self::LSB_MV;
-        if raw_12bit > 0xFFF { // Clamp to max 12-bit value (4095)
+        if raw_12bit > 0xFFF {
+            // Clamp to max 12-bit value (4095)
             raw_12bit = 0xFFF;
         }
 
@@ -630,7 +663,10 @@ impl Default for OtgCurrentSetting {
 
 impl OtgCurrentSetting {
     pub fn from_milliamps(milliamps: u16, rsns_bat: SenseResistorValue) -> Self {
-        Self { milliamps, rsns_bat }
+        Self {
+            milliamps,
+            rsns_bat,
+        }
     }
 
     pub fn to_milliamps(&self) -> u16 {
@@ -737,12 +773,13 @@ impl InputVoltageSetting {
             0 // Clamp to the minimum register value
         };
 
-        if raw_9bit > 0x1FF { // Clamp to max 9-bit value
+        if raw_9bit > 0x1FF {
+            // Clamp to max 9-bit value
             raw_9bit = 0x1FF;
         }
 
         let d8 = ((raw_9bit >> 8) & 0x01) as u8; // D8 is bit 8 of the 9-bit value
-        let d7_d0 = (raw_9bit & 0xFF) as u8;   // D7-D0 are bits 7:0
+        let d7_d0 = (raw_9bit & 0xFF) as u8; // D7-D0 are bits 7:0
 
         // MSB (0x0B): D8 in bit 5. Other bits are reserved (assume 0).
         let msb_byte = d8 << 5;
@@ -805,7 +842,8 @@ impl VsysMinSetting {
     /// MSB (0x0D) contains the 8-bit value. LSB (0x0C) is 0x00.
     pub fn to_raw(&self) -> u16 {
         let mut msb_val = self.millivolts / Self::LSB_MV;
-        if msb_val > 0xFF { // Clamp to max 8-bit value
+        if msb_val > 0xFF {
+            // Clamp to max 8-bit value
             msb_val = 0xFF;
         }
         (msb_val as u16) << 8 // LSB is 0x00
@@ -852,7 +890,7 @@ impl IinHostSetting {
         let raw_7bit = (raw_reg_value >> 8) as u8; // Extract 7-bit current code from MSB
         let (lsb_ma, offset_ma) = match rsns_ac {
             SenseResistorValue::R5mOhm => (100, 100), // LSB 100mA, Offset 100mA
-            SenseResistorValue::R10mOhm => (50, 50),   // LSB 50mA, Offset 50mA
+            SenseResistorValue::R10mOhm => (50, 50),  // LSB 50mA, Offset 50mA
         };
         let milliamps = (raw_7bit as u16) * lsb_ma + offset_ma;
         Self { milliamps }
@@ -869,7 +907,8 @@ impl IinHostSetting {
         if self.milliamps >= offset_ma {
             raw_7bit_val = (self.milliamps - offset_ma) / lsb_ma;
         }
-        if raw_7bit_val > 0x7F { // Clamp to max 7-bit value (127)
+        if raw_7bit_val > 0x7F {
+            // Clamp to max 7-bit value (127)
             raw_7bit_val = 0x7F;
         }
         (raw_7bit_val as u16) << 8 // Place 7-bit code in MSB, LSB is 0x00
@@ -883,7 +922,6 @@ impl IinHostSetting {
         ((raw_val & 0xFF) as u8, (raw_val >> 8) as u8)
     }
 }
-
 
 /// Represents the Input Current Limit Set by Host in mA.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -1715,7 +1753,7 @@ impl Default for ChargeOption3 {
     fn default() -> Self {
         Self {
             msb_flags: ChargeOption3MsbFlags::from_bits_truncate(0x04), // Reset MSB 0x04
-            lsb_flags: ChargeOption3Flags::from_bits_truncate(0x34),   // Reset LSB 0x34
+            lsb_flags: ChargeOption3Flags::from_bits_truncate(0x34),    // Reset LSB 0x34
         }
     }
 }
@@ -1755,7 +1793,7 @@ impl Default for ChargeOption4 {
     fn default() -> Self {
         Self {
             msb_flags: ChargeOption4MsbFlags::from_bits_truncate(0x00), // Reset MSB 0x00
-            lsb_flags: ChargeOption4Flags::from_bits_truncate(0x48),   // Reset LSB 0x48
+            lsb_flags: ChargeOption4Flags::from_bits_truncate(0x48),    // Reset LSB 0x48
         }
     }
 }
@@ -1833,7 +1871,9 @@ impl defmt::Format for VminActiveProtection {
 impl VminActiveProtection {
     pub fn from_u16(value: u16) -> Self {
         Self {
-            msb_flags: VminActiveProtectionMsbFlags::from_bits_truncate(((value >> 8) & 0xFF) as u8),
+            msb_flags: VminActiveProtectionMsbFlags::from_bits_truncate(
+                ((value >> 8) & 0xFF) as u8,
+            ),
             lsb_flags: VminActiveProtectionFlags::from_bits_truncate((value & 0xFF) as u8),
         }
     }
@@ -2081,7 +2121,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config::new(
-            4, // Default to 4-cell
+            4,                             // Default to 4-cell
             SenseResistorValue::default(), // Default RsnsBat
             SenseResistorValue::default(), // Default RsnsAc
         )

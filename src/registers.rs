@@ -529,7 +529,8 @@ pub enum DitherSetting {
 
 impl DitherSetting {
     pub fn from_bits(bits: u8) -> Self {
-        match (bits >> 3) & 0b11 { // EN_DITHER is bits 4:3
+        match (bits >> 3) & 0b11 {
+            // EN_DITHER is bits 4:3
             0b01 => DitherSetting::Dither1X,
             0b10 => DitherSetting::Dither2X,
             0b11 => DitherSetting::Dither3X,
@@ -575,7 +576,12 @@ impl defmt::Format for ChargeOption4MsbFlags {
     fn format(&self, fmt: defmt::Formatter) {
         let flags_part = self.bits() & !ChargeOption4MsbFlags::EN_DITHER_MASK.bits();
         let dither_part = self.get_en_dither();
-        defmt::write!(fmt, "Flags({=u8:b}) EN_DITHER({:?})", flags_part, dither_part);
+        defmt::write!(
+            fmt,
+            "Flags({=u8:b}) EN_DITHER({:?})",
+            flags_part,
+            dither_part
+        );
     }
 }
 
@@ -685,7 +691,9 @@ impl VminActiveProtectionFlags {
 #[cfg(feature = "defmt")]
 impl defmt::Format for VminActiveProtectionFlags {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "VSYS_TH2: {=u8}, EN_VSYSTH2_FOLLOW_VSYSTH1: {}, EN_FRS: {}",
+        defmt::write!(
+            fmt,
+            "VSYS_TH2: {=u8}, EN_VSYSTH2_FOLLOW_VSYSTH1: {}, EN_FRS: {}",
             self.get_vsys_th2(),
             self.get_en_vsysth2_follow_vsysth1(),
             self.get_en_frs()

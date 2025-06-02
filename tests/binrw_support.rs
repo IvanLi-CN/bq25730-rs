@@ -59,7 +59,7 @@ fn test_prochot_status_binrw_roundtrip() {
 
 #[test]
 fn test_charge_current_binrw_roundtrip() {
-    let original = ChargeCurrent {
+    let original = ChargeCurrentSetting {
         milliamps: 1024,
         rsns_bat: SenseResistorValue::R5mOhm,
     };
@@ -68,19 +68,19 @@ fn test_charge_current_binrw_roundtrip() {
 
 #[test]
 fn test_charge_voltage_binrw_roundtrip() {
-    let original = ChargeVoltage(16000); // Example value in mV
+    let original = bq25730_async_rs::data_types::ChargeVoltageSetting { millivolts: 16000 }; // Example value in mV
     test_binrw_roundtrip(original);
 }
 
 #[test]
 fn test_otg_voltage_binrw_roundtrip() {
-    let original = OtgVoltage(5000); // Example value in mV
+    let original = bq25730_async_rs::data_types::OtgVoltageSetting { millivolts: 5000 }; // Example value in mV
     test_binrw_roundtrip(original);
 }
 
 #[test]
 fn test_otg_current_binrw_roundtrip() {
-    let original = OtgCurrent {
+    let original = OtgCurrentSetting {
         milliamps: 2000,
         rsns_bat: SenseResistorValue::R5mOhm,
     };
@@ -89,13 +89,13 @@ fn test_otg_current_binrw_roundtrip() {
 
 #[test]
 fn test_input_voltage_binrw_roundtrip() {
-    let original = InputVoltage(11968); // Example value in mV (11968 - 3200 = 8768 = 64 * 137)
+    let original = bq25730_async_rs::data_types::InputVoltageSetting { millivolts: 11968 }; // Example value in mV (11968 - 3200 = 8768 = 64 * 137)
     test_binrw_roundtrip(original);
 }
 
 #[test]
 fn test_vsys_min_binrw_roundtrip() {
-    let original = VsysMin(3500); // Example value in mV
+    let original = bq25730_async_rs::data_types::VsysMinSetting { millivolts: 3500 }; // Example value in mV
     test_binrw_roundtrip(original);
 }
 
